@@ -1,8 +1,8 @@
 // apps/api/src/routes/search.js
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
-import { geocodeAddress } from '../services/geocoding';
-import { calculateDistance } from '../utils/distance';
+import { geocodeAddress } from '../services/geocoding.js';
+import { calculateDistance } from '../utils/distance.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();

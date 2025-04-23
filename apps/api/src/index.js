@@ -1,4 +1,4 @@
-
+// in apps/api/src/index.js
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -8,6 +8,9 @@ import { PrismaClient } from '@prisma/client';
 import authRoutes from './routes/auth.js';
 import locationRoutes from './routes/locations.js';
 import providerRoutes from './routes/providers.js';
+import procedureRoutes from './routes/procedures.js'; // Add this import
+import searchRoutes from './routes/search.js'; // Add this if not present
+
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +33,8 @@ app.get('/api', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/providers', providerRoutes);
+app.use('/api/procedures', procedureRoutes); // Add this line
+app.use('/api/search', searchRoutes); // Add this if not present
 
 // Error handler
 app.use((err, req, res, next) => {
@@ -40,7 +45,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server with error handling for port conflicts
+// Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 }).on('error', (err) => {
@@ -49,11 +54,3 @@ app.listen(PORT, () => {
     process.exit(1);
   }
 });
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  await prisma.$disconnect();
-  process.exit(0);
-});
-

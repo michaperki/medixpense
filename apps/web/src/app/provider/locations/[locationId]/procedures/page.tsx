@@ -75,27 +75,52 @@ export default function ProceduresPage() {
     try {
       setLoading(true);
       
-      // Fetch location details
+      // Fetch location details - handle response structure correctly
       const locationResponse = await locationsApi.getById(locationId);
-      setLocation(locationResponse.data.location);
       
-      // Fetch procedures for this location
-      const proceduresResponse = await proceduresApi.getProviderProcedures({ locationId });
-      setProcedures(proceduresResponse.data.procedures || []);
+      // Handle both possible response structures
+      const locationData = locationResponse.location || locationResponse;
       
-      // Extract unique categories
-      const uniqueCategories = [...new Set(
-        proceduresResponse.data.procedures
-          .map((p: Procedure) => p.template.category)
-          .map(category => JSON.stringify(category))
-      )].map(str => JSON.parse(str));
+      if (!locationData) {
+        throw new Error('Location data not found');
+      }
       
-      setCategories(uniqueCategories);
+      setLocation(locationData);
+      
+      // Try to fetch procedures, but don't let it break the page if it fails
+      try {
+        const proceduresResponse = await proceduresApi.getProviderProcedures({ locationId });
+        
+        // Handle different response structures for procedures
+        const proceduresData = 
+          proceduresResponse?.procedures || 
+          (proceduresResponse?.data ? proceduresResponse.data.procedures : []) ||
+          [];
+        
+        setProcedures(proceduresData);
+        
+        // Only extract categories if we have procedure data
+        if (proceduresData.length > 0) {
+          const uniqueCategories = [...new Set(
+            proceduresData
+              .filter(p => p.template && p.template.category)
+              .map((p) => p.template.category)
+              .map(category => JSON.stringify(category))
+          )].map(str => JSON.parse(str));
+          
+          setCategories(uniqueCategories);
+        }
+      } catch (procedureErr) {
+        console.error('Error fetching procedures:', procedureErr);
+        // We don't set the main error state here, as we still want to show the location
+        // Just set empty procedures
+        setProcedures([]);
+      }
       
       setError(null);
     } catch (err) {
       console.error('Error fetching data:', err);
-      setError('Failed to load procedures. Please try again later.');
+      setError('Failed to load location data. Please try again later.');
     } finally {
       setLoading(false);
     }
@@ -340,7 +365,7 @@ export default function ProceduresPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search procedures"
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             />
           </div>
           
@@ -352,8 +377,9 @@ export default function ProceduresPage() {
               id="category-filter"
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+              className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 text-gray-900 shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
             >
+
               <option value="">All Categories</option>
               {categories.map(category => (
                 <option key={category.id} value={category.id}>
@@ -483,7 +509,7 @@ export default function ProceduresPage() {
                             {procedure.template.category.name}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-900 text-right text-sm font-medium">
                           ${procedure.price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
