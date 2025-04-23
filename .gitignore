@@ -1,0 +1,36 @@
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-lock.yaml
+
+# Environment
+.env*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# Prisma
+prisma/dev.db
+prisma/migrations/
+
+# Turbo / Nx
+turbo/
+.cache/
+.vite/

@@ -1,0 +1,132 @@
+// packages/database/prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String
+  firstName         String?
+  lastName          String?
+  role              Role      @default(PROVIDER)
+  status            Status    @default(ACTIVE)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  provider          Provider?
+  resetToken        String?
+  resetTokenExpires DateTime?
+
+  @@map("users")
+}
+
+model Provider {
+  id            String     @id @default(uuid())
+  userId        String     @unique
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationName String
+  phone         String?
+  website       String?
+  bio           String?
+  logoUrl       String?
+  stripeCustomerId String?
+  subscriptionStatus SubscriptionStatus @default(INACTIVE)
+  subscriptionTier String?
+  locations     Location[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@map("providers")
+}
+
+model Location {
+  id            String     @id @default(uuid())
+  providerId    String
+  provider      Provider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  name          String
+  address1      String
+  address2      String?
+  city          String
+  state         String
+  zipCode       String
+  phone         String?
+  latitude      Float?
+  longitude     Float?
+  isActive      Boolean    @default(true)
+  procedures    ProcedurePrice[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@map("locations")
+}
+
+model ProcedureCategory {
+  id          String      @id @default(uuid())
+  name        String
+  slug        String      @unique
+  description String?
+  parentId    String?
+  parent      ProcedureCategory? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    ProcedureCategory[] @relation("CategoryHierarchy")
+  procedures  ProcedureTemplate[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("procedure_categories")
+}
+
+model ProcedureTemplate {
+  id          String      @id @default(uuid())
+  name        String
+  description String?
+  categoryId  String
+  category    ProcedureCategory @relation(fields: [categoryId], references: [id])
+  cptCode     String?     // Optional, for future compatibility
+  searchTerms String?     // Additional keywords for searching
+  isActive    Boolean     @default(true)
+  prices      ProcedurePrice[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("procedure_templates")
+}
+
+model ProcedurePrice {
+  id            String           @id @default(uuid())
+  locationId    String
+  location      Location         @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  templateId    String
+  template      ProcedureTemplate @relation(fields: [templateId], references: [id])
+  price         Float
+  comments      String?
+  isActive      Boolean          @default(true)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@unique([locationId, templateId])
+  @@map("procedure_prices")
+}
+
+enum Role {
+  ADMIN
+  PROVIDER
+  USER
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  TRIAL
+  PAST_DUE
+}
