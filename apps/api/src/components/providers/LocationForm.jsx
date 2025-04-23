@@ -1,18 +1,43 @@
-
-// apps/web/src/components/providers/LocationForm.jsx
+// apps/web/src/components/providers/LocationForm.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import { states } from '../../utils/states';
+import apiClient from '../../lib/apiClient';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
+import { ErrorAlert } from '../ui/ErrorAlert';
+import { useToast } from '../../hooks/useToast';
 
-export default function LocationForm() {
-  const { id } = useParams();
+// Define types for the form data
+interface LocationFormData {
+  name: string;
+  address1: string;
+  address2: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  phone: string;
+  isActive: boolean;
+}
+
+// Define validation error interface
+interface ValidationErrors {
+  [key: string]: string | null;
+}
+
+// Props interface
+interface LocationFormProps {
+  className?: string;
+}
+
+export default function LocationForm({ className = '' }: LocationFormProps) {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { token } = useAuth();
+  const { showToast } = useToast();
   const isEditMode = !!id;
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<LocationFormData>({
     name: '',
     address1: '',
     address2: '',
@@ -23,23 +48,20 @@ export default function LocationForm() {
     isActive: true
   });
   
-  const [loading, setLoading] = useState(isEditMode);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
-  const [validationErrors, setValidationErrors] = useState({});
+  const [loading, setLoading] = useState<boolean>(isEditMode);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
 
   useEffect(() => {
     if (isEditMode) {
       const fetchLocation = async () => {
         try {
           setLoading(true);
-          const response = await axios.get(`/api/locations/${id}`, {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          });
+          // Use apiClient instead of direct axios call
+          const response = await apiClient.get<{ location: any }>(`/api/locations/${id}`);
           
-          const { location } = response.data;
+          const { location } = response;
           setFormData({
             name: location.name,
             address1: location.address1,
@@ -54,6 +76,12 @@ export default function LocationForm() {
         } catch (err) {
           console.error('Error fetching location:', err);
           setError('Failed to load location details. Please try again.');
+          
+          // Show error toast
+          showToast({
+            type: 'error',
+            message: 'Failed to load location details'
+          });
         } finally {
           setLoading(false);
         }
@@ -61,10 +89,12 @@ export default function LocationForm() {
 
       fetchLocation();
     }
-  }, [id, token, isEditMode]);
+  }, [id, token, isEditMode, showToast]);
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+    const checked = (e.target as HTMLInputElement).checked;
+    
     setFormData({
       ...formData,
       [name]: type === 'checkbox' ? checked : value
@@ -79,8 +109,8 @@ export default function LocationForm() {
     }
   };
 
-  const validateForm = () => {
-    const errors = {};
+  const validateForm = (): boolean => {
+    const errors: ValidationErrors = {};
     
     if (!formData.name.trim()) errors.name = 'Location name is required';
     if (!formData.address1.trim()) errors.address1 = 'Address is required';
@@ -99,7 +129,7 @@ export default function LocationForm() {
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     if (!validateForm()) {
@@ -111,50 +141,53 @@ export default function LocationForm() {
       setError(null);
       
       if (isEditMode) {
-        await axios.put(`/api/locations/${id}`, formData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+        // Use apiClient instead of direct axios call
+        await apiClient.put(`/api/locations/${id}`, formData);
+        
+        showToast({
+          type: 'success',
+          message: 'Location updated successfully'
         });
       } else {
-        await axios.post('/api/locations', formData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+        // Use apiClient instead of direct axios call
+        await apiClient.post('/api/locations', formData);
+        
+        showToast({
+          type: 'success',
+          message: 'Location created successfully'
         });
       }
       
       // Redirect back to locations list
       navigate('/provider/locations');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving location:', err);
       if (err.response && err.response.data && err.response.data.errors) {
         // Handle validation errors from server
-        const serverErrors = {};
-        err.response.data.errors.forEach(error => {
+        const serverErrors: ValidationErrors = {};
+        err.response.data.errors.forEach((error: { param: string; msg: string }) => {
           serverErrors[error.param] = error.msg;
         });
         setValidationErrors(serverErrors);
       } else {
         setError('Failed to save location. Please try again.');
       }
+      
+      showToast({
+        type: 'error',
+        message: 'Failed to save location'
+      });
     } finally {
       setSubmitting(false);
     }
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    return <LoadingSpinner size="lg" className="h-64" />;
   }
 
   return (
-    <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+    <div className={`bg-white shadow overflow-hidden sm:rounded-lg ${className}`}>
       <div className="px-4 py-5 sm:px-6">
         <h3 className="text-lg leading-6 font-medium text-gray-900">
           {isEditMode ? 'Edit Location' : 'Add New Location'}
@@ -166,15 +199,7 @@ export default function LocationForm() {
         </p>
       </div>
       
-      {error && (
-        <div className="rounded-md bg-red-50 p-4 mx-6 my-4">
-          <div className="flex">
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">{error}</h3>
-            </div>
-          </div>
-        </div>
-      )}
+      {error && <ErrorAlert message={error} />}
       
       <div className="border-t border-gray-200">
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
@@ -389,4 +414,3 @@ export default function LocationForm() {
     </div>
   );
 }
-

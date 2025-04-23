@@ -1,26 +1,43 @@
-// apps/web/src/components/providers/LocationsList.jsx
+// apps/web/src/components/providers/LocationsList.tsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import { MapPinIcon, PencilIcon, TrashIcon, PlusIcon } from '@heroicons/react/24/outline';
+import apiClient from '../../lib/apiClient';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
+import { ErrorAlert } from '../ui/ErrorAlert';
+import { useToast } from '../../hooks/useToast';
 
-export default function LocationsList() {
+// Define Location interface
+interface Location {
+  id: string;
+  name: string;
+  address1: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  isActive: boolean;
+}
+
+// Component props interface
+interface LocationsListProps {
+  className?: string;
+}
+
+export default function LocationsList({ className = '' }: LocationsListProps) {
   const { token } = useAuth();
-  const [locations, setLocations] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     const fetchLocations = async () => {
       try {
         setLoading(true);
-        const response = await axios.get('/api/locations', {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-        setLocations(response.data.locations);
+        // Use apiClient instead of direct axios call
+        const response = await apiClient.get<{ locations: Location[] }>('/api/locations');
+        setLocations(response.locations);
         setError(null);
       } catch (err) {
         console.error('Error fetching locations:', err);
@@ -33,36 +50,41 @@ export default function LocationsList() {
     fetchLocations();
   }, [token]);
 
-  const handleDeleteLocation = async (id) => {
+  const handleDeleteLocation = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this location? This will also remove all procedure prices for this location.')) {
       return;
     }
 
     try {
-      await axios.delete(`/api/locations/${id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      // Use apiClient instead of direct axios call
+      await apiClient.delete(`/api/locations/${id}`);
       
       // Remove location from state
       setLocations(locations.filter(location => location.id !== id));
+      
+      // Show success toast
+      showToast({
+        type: 'success',
+        message: 'Location deleted successfully'
+      });
     } catch (err) {
       console.error('Error deleting location:', err);
       setError('Failed to delete location. Please try again.');
+      
+      // Show error toast
+      showToast({
+        type: 'error',
+        message: 'Failed to delete location'
+      });
     }
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    return <LoadingSpinner size="lg" className="h-64" />;
   }
 
   return (
-    <div className="bg-white shadow overflow-hidden sm:rounded-md">
+    <div className={`bg-white shadow overflow-hidden sm:rounded-md ${className}`}>
       <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
         <div>
           <h3 className="text-lg leading-6 font-medium text-gray-900">Your Locations</h3>
@@ -79,15 +101,7 @@ export default function LocationsList() {
         </Link>
       </div>
       
-      {error && (
-        <div className="rounded-md bg-red-50 p-4 mx-6 my-4">
-          <div className="flex">
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">{error}</h3>
-            </div>
-          </div>
-        </div>
-      )}
+      {error && <ErrorAlert message={error} />}
       
       {locations.length === 0 ? (
         <div className="text-center py-12">
@@ -163,4 +177,3 @@ export default function LocationsList() {
     </div>
   );
 }
-

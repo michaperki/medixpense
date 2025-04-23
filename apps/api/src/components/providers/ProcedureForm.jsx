@@ -1,61 +1,99 @@
-// apps/web/src/components/providers/ProcedureForm.jsx
+// apps/web/src/components/providers/ProcedureForm.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import { CurrencyDollarIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import apiClient from '../../lib/apiClient';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
+import { ErrorAlert } from '../ui/ErrorAlert';
+import { useToast } from '../../hooks/useToast';
 
-export default function ProcedureForm() {
-  const { locationId, procedureId } = useParams();
+// Define types
+interface Category {
+  id: string;
+  name: string;
+}
+
+interface Template {
+  id: string;
+  name: string;
+  description?: string;
+  category?: Category;
+}
+
+interface Location {
+  id: string;
+  name: string;
+  address1: string;
+  city: string;
+  state: string;
+  zipCode: string;
+}
+
+interface ProcedureFormData {
+  templateId: string;
+  price: string;
+  comments: string;
+  isActive: boolean;
+}
+
+interface ValidationErrors {
+  [key: string]: string | null;
+}
+
+// Component props interface
+interface ProcedureFormProps {
+  className?: string;
+}
+
+export default function ProcedureForm({ className = '' }: ProcedureFormProps) {
+  const { locationId, procedureId } = useParams<{ locationId?: string; procedureId?: string }>();
   const navigate = useNavigate();
   const { token } = useAuth();
+  const { showToast } = useToast();
   const isEditMode = !!procedureId;
 
-  const [location, setLocation] = useState(null);
-  const [formData, setFormData] = useState({
+  const [location, setLocation] = useState<Location | null>(null);
+  const [formData, setFormData] = useState<ProcedureFormData>({
     templateId: '',
     price: '',
     comments: '',
     isActive: true
   });
 
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
-  const [validationErrors, setValidationErrors] = useState({});
+  const [loading, setLoading] = useState<boolean>(true);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   
   // For template selection
-  const [templates, setTemplates] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [categories, setCategories] = useState([]);
-  const [fetchingTemplates, setFetchingTemplates] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [fetchingTemplates, setFetchingTemplates] = useState<boolean>(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
 
   // Initial data loading - location data and procedure data if editing
   useEffect(() => {
     const fetchInitialData = async () => {
+      if (!locationId) {
+        setError('Location ID is missing');
+        return;
+      }
+      
       try {
         setLoading(true);
         
-        // Get location details
-        const locationResponse = await axios.get(`/api/locations/${locationId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-        
-        setLocation(locationResponse.data.location);
+        // Get location details - use apiClient instead of direct axios
+        const locationResponse = await apiClient.get<{ location: Location }>(`/api/locations/${locationId}`);
+        setLocation(locationResponse.location);
         
         // If editing, get procedure details
-        if (isEditMode) {
-          const procedureResponse = await axios.get(`/api/procedures/price/${procedureId}`, {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          });
+        if (isEditMode && procedureId) {
+          const procedureResponse = await apiClient.get<{ procedurePrice: any }>(`/api/procedures/price/${procedureId}`);
           
-          const { procedurePrice } = procedureResponse.data;
+          const { procedurePrice } = procedureResponse;
           
           setFormData({
             templateId: procedurePrice.templateId,
@@ -68,20 +106,25 @@ export default function ProcedureForm() {
         }
         
         // Load categories for filter dropdown
-        const categoriesResponse = await axios.get('/api/procedures/categories');
-        setCategories(categoriesResponse.data.categories);
+        const categoriesResponse = await apiClient.get<{ categories: Category[] }>('/api/procedures/categories');
+        setCategories(categoriesResponse.categories);
         
         setError(null);
       } catch (err) {
         console.error('Error fetching initial data:', err);
         setError('Failed to load data. Please try again.');
+        
+        showToast({
+          type: 'error',
+          message: 'Failed to load initial data'
+        });
       } finally {
         setLoading(false);
       }
     };
     
     fetchInitialData();
-  }, [locationId, procedureId, token, isEditMode]);
+  }, [locationId, procedureId, token, isEditMode, showToast]);
 
   // Search for procedure templates when search term or category changes
   useEffect(() => {
@@ -95,10 +138,11 @@ export default function ProcedureForm() {
         if (searchTerm) params.append('search', searchTerm);
         if (selectedCategory) params.append('categoryId', selectedCategory);
         
-        const response = await axios.get(`/api/procedures/templates?${params.toString()}`);
-        setTemplates(response.data.templates);
+        const response = await apiClient.get<{ templates: Template[] }>(`/api/procedures/templates?${params.toString()}`);
+        setTemplates(response.templates);
       } catch (err) {
         console.error('Error searching templates:', err);
+        // Don't show error toast for search failures, as they're less critical
       } finally {
         setFetchingTemplates(false);
       }
@@ -111,8 +155,10 @@ export default function ProcedureForm() {
     return () => clearTimeout(debounceTimeout);
   }, [searchTerm, selectedCategory]);
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+    const checked = (e.target as HTMLInputElement).checked;
+    
     setFormData({
       ...formData,
       [name]: type === 'checkbox' ? checked : value
@@ -127,7 +173,7 @@ export default function ProcedureForm() {
     }
   };
 
-  const selectTemplate = (template) => {
+  const selectTemplate = (template: Template) => {
     setSelectedTemplate(template);
     setFormData({
       ...formData,
@@ -139,8 +185,8 @@ export default function ProcedureForm() {
     });
   };
 
-  const validateForm = () => {
-    const errors = {};
+  const validateForm = (): boolean => {
+    const errors: ValidationErrors = {};
     
     if (!formData.templateId) errors.templateId = 'Please select a procedure';
     
@@ -157,10 +203,10 @@ export default function ProcedureForm() {
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
-    if (!validateForm()) {
+    if (!validateForm() || !locationId) {
       return;
     }
     
@@ -174,51 +220,52 @@ export default function ProcedureForm() {
         price: parseFloat(formData.price)
       };
       
-      if (isEditMode) {
-        await axios.put(`/api/procedures/price/${procedureId}`, dataToSubmit, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+      if (isEditMode && procedureId) {
+        await apiClient.put(`/api/procedures/price/${procedureId}`, dataToSubmit);
+        
+        showToast({
+          type: 'success',
+          message: 'Procedure price updated successfully'
         });
       } else {
-        await axios.post('/api/procedures/price', dataToSubmit, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+        await apiClient.post('/api/procedures/price', dataToSubmit);
+        
+        showToast({
+          type: 'success',
+          message: 'Procedure price added successfully'
         });
       }
       
       // Redirect back to procedures list
       navigate(`/provider/locations/${locationId}/procedures`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving procedure:', err);
       if (err.response && err.response.data && err.response.data.errors) {
         // Handle validation errors from server
-        const serverErrors = {};
-        err.response.data.errors.forEach(error => {
+        const serverErrors: ValidationErrors = {};
+        err.response.data.errors.forEach((error: { param: string; msg: string }) => {
           serverErrors[error.param] = error.msg;
         });
         setValidationErrors(serverErrors);
       } else {
         setError('Failed to save procedure. Please try again.');
       }
+      
+      showToast({
+        type: 'error',
+        message: 'Failed to save procedure'
+      });
     } finally {
       setSubmitting(false);
     }
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    return <LoadingSpinner size="lg" className="h-64" />;
   }
 
   return (
-    <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+    <div className={`bg-white shadow overflow-hidden sm:rounded-lg ${className}`}>
       <div className="px-4 py-5 sm:px-6">
         <h3 className="text-lg leading-6 font-medium text-gray-900">
           {isEditMode ? 'Edit Procedure Price' : 'Add New Procedure Price'}
@@ -235,15 +282,7 @@ export default function ProcedureForm() {
         )}
       </div>
       
-      {error && (
-        <div className="rounded-md bg-red-50 p-4 mx-6 my-4">
-          <div className="flex">
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">{error}</h3>
-            </div>
-          </div>
-        </div>
-      )}
+      {error && <ErrorAlert message={error} />}
       
       <div className="border-t border-gray-200">
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
@@ -327,7 +366,7 @@ export default function ProcedureForm() {
                 <div className="mt-4 border border-gray-200 rounded-md max-h-60 overflow-y-auto">
                   {fetchingTemplates ? (
                     <div className="flex justify-center items-center h-32">
-                      <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
+                      <LoadingSpinner size="sm" />
                     </div>
                   ) : templates.length === 0 ? (
                     <div className="p-4 text-center text-gray-500">
@@ -352,7 +391,10 @@ export default function ProcedureForm() {
                             </div>
                             <button
                               type="button"
-                              onClick={() => selectTemplate(template)}
+                              onClick={(e) => {
+                                e.stopPropagation(); // Prevent double selection
+                                selectTemplate(template);
+                              }}
                               className="text-blue-600 hover:text-blue-800 text-sm"
                             >
                               Select

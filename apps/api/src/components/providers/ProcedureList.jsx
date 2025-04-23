@@ -1,8 +1,6 @@
-
-// apps/web/src/components/providers/ProcedureList.jsx
+// apps/web/src/components/providers/ProcedureList.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import { 
   ArrowsUpDownIcon, 
@@ -12,66 +10,127 @@ import {
   TrashIcon, 
   ClipboardDocumentListIcon 
 } from '@heroicons/react/24/outline';
+import apiClient from '../../lib/apiClient';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
+import { ErrorAlert } from '../ui/ErrorAlert';
+import { useToast } from '../../hooks/useToast';
+import { ConfirmationModal } from '../ui/ConfirmationModal';
 
-export default function ProcedureList() {
-  const { locationId } = useParams();
+// Type definitions
+interface Category {
+  id: string;
+  name: string;
+}
+
+interface Template {
+  id: string;
+  name: string;
+  description?: string;
+  category: Category;
+}
+
+interface Procedure {
+  id: string;
+  templateId: string;
+  template: Template;
+  price: number;
+  comments?: string;
+  isActive: boolean;
+}
+
+interface Location {
+  id: string;
+  name: string;
+  address1: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  procedures: Procedure[];
+}
+
+// Component props interface
+interface ProcedureListProps {
+  className?: string;
+}
+
+export default function ProcedureList({ className = '' }: ProcedureListProps) {
+  const { locationId } = useParams<{ locationId: string }>();
   const { token } = useAuth();
+  const { showToast } = useToast();
   
-  const [location, setLocation] = useState(null);
-  const [procedures, setProcedures] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('name'); // 'name' or 'price'
-  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
+  const [location, setLocation] = useState<Location | null>(null);
+  const [procedures, setProcedures] = useState<Procedure[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('name'); // 'name' or 'price'
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc'); // 'asc' or 'desc'
+  
+  // For confirmation modal
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [procedureToDelete, setProcedureToDelete] = useState<string | null>(null);
   
   useEffect(() => {
     const fetchLocationData = async () => {
       try {
         setLoading(true);
         
-        // Get location details
-        const locationResponse = await axios.get(`/api/locations/${locationId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
+        // Get location details - use apiClient instead of direct axios
+        const locationResponse = await apiClient.get<{ location: Location }>(`/api/locations/${locationId}`);
         
-        setLocation(locationResponse.data.location);
-        setProcedures(locationResponse.data.location.procedures || []);
+        setLocation(locationResponse.location);
+        setProcedures(locationResponse.location.procedures || []);
         setError(null);
       } catch (err) {
         console.error('Error fetching location data:', err);
         setError('Failed to load location data. Please try again.');
+        
+        showToast({
+          type: 'error',
+          message: 'Failed to load location data'
+        });
       } finally {
         setLoading(false);
       }
     };
     
     fetchLocationData();
-  }, [locationId, token]);
+  }, [locationId, token, showToast]);
   
-  const handleDeleteProcedure = async (procedureId) => {
-    if (!window.confirm('Are you sure you want to delete this procedure price?')) {
-      return;
-    }
+  const confirmDeleteProcedure = (procedureId: string) => {
+    setProcedureToDelete(procedureId);
+    setIsDeleteModalOpen(true);
+  };
+  
+  const handleDeleteProcedure = async () => {
+    if (!procedureToDelete) return;
     
     try {
-      await axios.delete(`/api/procedures/price/${procedureId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      // Use apiClient instead of direct axios
+      await apiClient.delete(`/api/procedures/price/${procedureToDelete}`);
       
       // Remove procedure from state
-      setProcedures(procedures.filter(proc => proc.id !== procedureId));
+      setProcedures(procedures.filter(proc => proc.id !== procedureToDelete));
+      
+      showToast({
+        type: 'success',
+        message: 'Procedure deleted successfully'
+      });
     } catch (err) {
       console.error('Error deleting procedure:', err);
       setError('Failed to delete procedure. Please try again.');
+      
+      showToast({
+        type: 'error',
+        message: 'Failed to delete procedure'
+      });
+    } finally {
+      setIsDeleteModalOpen(false);
+      setProcedureToDelete(null);
     }
   };
   
-  const toggleSortOrder = (field) => {
+  const toggleSortOrder = (field: string) => {
     if (sortBy === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
@@ -99,11 +158,7 @@ export default function ProcedureList() {
     });
   
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    return <LoadingSpinner size="lg" className="h-64" />;
   }
   
   if (!location) {
@@ -130,7 +185,7 @@ export default function ProcedureList() {
   }
   
   return (
-    <div className="bg-white shadow overflow-hidden sm:rounded-md">
+    <div className={`bg-white shadow overflow-hidden sm:rounded-md ${className}`}>
       <div className="px-4 py-5 sm:px-6">
         <div className="flex flex-col md:flex-row md:justify-between md:items-center">
           <div>
@@ -153,15 +208,7 @@ export default function ProcedureList() {
         </div>
       </div>
       
-      {error && (
-        <div className="rounded-md bg-red-50 p-4 mx-6 my-4">
-          <div className="flex">
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">{error}</h3>
-            </div>
-          </div>
-        </div>
-      )}
+      {error && <ErrorAlert message={error} />}
       
       <div className="px-4 py-3 border-b border-gray-200">
         <div className="flex items-center">
@@ -277,7 +324,7 @@ export default function ProcedureList() {
                         <PencilIcon className="h-5 w-5 inline" />
                       </Link>
                       <button
-                        onClick={() => handleDeleteProcedure(procedure.id)}
+                        onClick={() => confirmDeleteProcedure(procedure.id)}
                         className="text-red-600 hover:text-red-900"
                       >
                         <TrashIcon className="h-5 w-5 inline" />
@@ -299,6 +346,18 @@ export default function ProcedureList() {
           )}
         </>
       )}
+      
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleDeleteProcedure}
+        title="Delete Procedure"
+        message="Are you sure you want to delete this procedure price? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmButtonClass="bg-red-600 hover:bg-red-700"
+      />
     </div>
   );
 }
