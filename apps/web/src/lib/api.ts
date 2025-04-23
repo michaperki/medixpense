@@ -10,11 +10,11 @@ import { searchService } from '@/services/searchService';
 // Auth API
 export const authApi = {
   login: (email: string, password: string) =>
-    apiClient.post('/api/auth/login', { email, password }),
+    apiClient.post('/auth/login', { email, password }),
   register: (data: any) =>
-    apiClient.post('/api/auth/register', data),
+    apiClient.post('/auth/register', data),
   me: () =>
-    apiClient.get('/api/auth/me'),
+    apiClient.get('/auth/me'),
   logout: authService?.logout,
   getCurrentUser: authService?.getCurrentUser,
   updateProfile: authService?.updateProfile,
@@ -26,15 +26,15 @@ export const authApi = {
 // Locations API
 export const locationsApi = {
   getAll: (page = 1, limit = 10) =>
-    apiClient.get('/api/locations', { params: { page, limit } }),
+    apiClient.get('/locations', { params: { page, limit } }),
   getById: (id: string) =>
-    apiClient.get(`/api/locations/${id}`),
+    apiClient.get(`/locations/${id}`),
   create: (data: any) =>
-    apiClient.post('/api/locations', data),
+    apiClient.post('/locations', data),
   update: (id: string, data: any) =>
-    apiClient.put(`/api/locations/${id}`, data),
+    apiClient.put(`/locations/${id}`, data),
   delete: (id: string) =>
-    apiClient.delete(`/api/locations/${id}`),
+    apiClient.delete(`/locations/${id}`),
 };
 
 // Procedures API - uses the class-based service
@@ -72,11 +72,11 @@ export const proceduresApi = {
 // Search API
 export const searchApi = {
   searchProcedures: (params: any) =>
-    apiClient.get('/api/search/procedures', { params }),
+    apiClient.get('/search/procedures', { params }),
   getStats: (templateId: string, params?: any) =>
-    apiClient.get(`/api/search/stats/${templateId}`, { params }),
+    apiClient.get(`/search/stats/${templateId}`, { params }),
   searchProviders: (params: any) =>
-    apiClient.get('/api/search/providers', { params }),
+    apiClient.get('/search/providers', { params }),
   getRecentSearches: searchService?.getRecentSearches,
   saveSearch: searchService?.saveSearch,
 };

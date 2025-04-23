@@ -1,4 +1,3 @@
-// src/lib/apiClient.ts
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 
 // API response interface for standardized responses
@@ -19,8 +18,10 @@ export interface ApiError {
 
 class ApiClient {
   public client: AxiosInstance;
+  private baseUrl: string;
 
   constructor(baseUrl: string = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api') {
+    this.baseUrl = baseUrl;
     this.client = axios.create({
       baseURL: baseUrl,
       headers: { 'Content-Type': 'application/json' },
@@ -38,6 +39,8 @@ class ApiClient {
           config.headers.Authorization = `Bearer ${token}`;
         }
       }
+      // Log the full URL being requested
+      console.log(`Request to: ${this.baseUrl}${config.url}`);
       return config;
     });
 

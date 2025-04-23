@@ -51,7 +51,7 @@ const locationService = {
     console.log('LocationService: Fetching locations with params:', params);
     
     try {
-      const result = await apiClient.get('/api/locations', {
+      const result = await apiClient.get('/locations', {
         params
       });
       
@@ -68,7 +68,7 @@ const locationService = {
   // Get a single location by ID
   getById: async (id: string): Promise<Location> => {
     try {
-      const result = await apiClient.get(`/api/locations/${id}`);
+      const result = await apiClient.get(`/locations/${id}`);
       return result.location || result;
     } catch (error) {
       console.error(`LocationService: Error fetching location with ID ${id}:`, error);
@@ -79,7 +79,7 @@ const locationService = {
   // Create a new location
   create: async (data: LocationCreateData): Promise<Location> => {
     try {
-      const result = await apiClient.post('/api/locations', data);
+      const result = await apiClient.post('/locations', data);
       return result.location || result;
     } catch (error) {
       console.error('LocationService: Error creating location:', error);
@@ -90,7 +90,7 @@ const locationService = {
   // Update an existing location
   update: async (id: string, data: Partial<LocationCreateData>): Promise<Location> => {
     try {
-      const result = await apiClient.put(`/api/locations/${id}`, data);
+      const result = await apiClient.put(`/locations/${id}`, data);
       return result.location || result;
     } catch (error) {
       console.error(`LocationService: Error updating location with ID ${id}:`, error);
@@ -101,7 +101,7 @@ const locationService = {
   // Delete a location
   delete: async (id: string): Promise<void> => {
     try {
-      await apiClient.delete(`/api/locations/${id}`);
+      await apiClient.delete(`/locations/${id}`);
     } catch (error) {
       console.error(`LocationService: Error deleting location with ID ${id}:`, error);
       throw error;

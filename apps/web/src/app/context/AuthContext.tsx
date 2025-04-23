@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import apiClient, { ApiError } from "@/lib/apiClient";
+import axios from "axios";
 import type {
   User,
   LoginRequest,
@@ -41,7 +42,7 @@ type UserWithProvider = User & {
 
 type AuthContextType = {
   user: UserWithProvider | null;
-  token: string | null; // Added to expose token directly as in the JSX version
+  token: string | null;
   loading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<UserWithProvider>;
@@ -60,10 +61,13 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserWithProvider | null>(null);
-  const [token, setToken] = useState<string | null>(null); // Added to track token explicitly
+  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  // Define the API base URL explicitly - IMPORTANT: ensure it has /api in the path
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
   // Hydrate from localStorage
   useEffect(() => {
@@ -71,8 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const u = localStorage.getItem("user");
     
     if (storedToken && u) {
-      setToken(storedToken); // Set token state
+      setToken(storedToken);
       
+      // Set the authorization header for apiClient
       if (apiClient.client?.defaults?.headers) {
         apiClient.client.defaults.headers.common["Authorization"] =
           "Bearer " + storedToken;
@@ -93,11 +98,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Function to fetch provider data
   const fetchProviderData = async (userId: string) => {
     try {
-      const response = await apiClient.get(`/providers/user/${userId}`);
+      console.log(`Fetching provider data for user ${userId}`);
+      console.log('API Base URL for provider fetch:', API_BASE_URL);
       
-      if (response) {
+      // Use direct axios to ensure the right URL
+      const response = await axios.get(`${API_BASE_URL}/providers/user/${userId}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`
+        }
+      });
+      
+      console.log('Provider data response:', response.data);
+      
+      if (response.data) {
         // Update user with provider data
-        const updatedUser = { ...user, provider: response };
+        const updatedUser = { ...user, provider: response.data };
         setUser(updatedUser);
         localStorage.setItem("user", JSON.stringify(updatedUser));
       }
@@ -122,19 +137,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     try {
       console.log('Attempting login with credentials:', { email });
+      console.log('Full API URL for login:', `${API_BASE_URL}/auth/login`);
       
-      const response = await apiClient.post<AuthResponse>('/auth/login', { 
+      // Use direct axios call to ensure correct URL with /api prefix
+      const response = await axios.post(`${API_BASE_URL}/auth/login`, { 
         email, 
         password 
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
       
-      console.log('Login response:', response);
+      console.log('Login response:', response.data);
       
-      if (!response || (!response.user && !response.token)) {
+      const responseData = response.data;
+      
+      if (!responseData || (!responseData.user && !responseData.token)) {
         throw new Error('Invalid response format from server');
       }
       
-      const { user, token: newToken } = response;
+      const { user, token: newToken } = responseData;
       
       // Update token state
       setToken(newToken);
@@ -147,11 +170,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // If user is a provider, fetch provider data
       if (user.role === 'PROVIDER') {
         try {
-          const providerResponse = await apiClient.get(`/providers/user/${user.id}`);
+          const providerResponse = await axios.get(`${API_BASE_URL}/providers/user/${user.id}`, {
+            headers: {
+              Authorization: `Bearer ${newToken}`
+            }
+          });
           
-          if (providerResponse) {
+          if (providerResponse.data) {
             // Add provider data to user
-            user.provider = providerResponse;
+            user.provider = providerResponse.data;
           }
         } catch (providerErr) {
           console.error("Error fetching provider data:", providerErr);
@@ -171,7 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let errorMessage = "Login failed";
       if (err.response) {
         console.error("Error response:", err.response.data);
-        errorMessage = err.response.data.message || 'Server error';
+        errorMessage = err.response.data?.message || 'Server error';
       } else if (err.request) {
         errorMessage = 'No response from server';
       } else {
@@ -187,7 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
-    setToken(null); // Clear token state
+    setToken(null);
     localStorage.removeItem("authToken");
     localStorage.removeItem("user");
     if (apiClient.client?.defaults?.headers?.common) {
@@ -208,13 +235,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     try {
-      const response = await apiClient.post<AuthResponse>('/auth/register', data);
+      console.log('Full API URL for register:', `${API_BASE_URL}/auth/register`);
       
-      if (!response || (!response.user && !response.token)) {
+      // Use direct axios for consistent URL handling
+      const response = await axios.post(`${API_BASE_URL}/auth/register`, data, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const responseData = response.data;
+      
+      if (!responseData || (!responseData.user && !responseData.token)) {
         throw new Error('Invalid response format from server');
       }
       
-      const { user, token: newToken } = response;
+      const { user, token: newToken } = responseData;
       
       // Update token state
       setToken(newToken);
@@ -227,11 +263,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // If user is a provider, fetch provider data
       if (user.role === 'PROVIDER') {
         try {
-          const providerResponse = await apiClient.get(`/providers/user/${user.id}`);
+          const providerResponse = await axios.get(`${API_BASE_URL}/providers/user/${user.id}`, {
+            headers: {
+              Authorization: `Bearer ${newToken}`
+            }
+          });
           
-          if (providerResponse) {
+          if (providerResponse.data) {
             // Add provider data to user
-            user.provider = providerResponse;
+            user.provider = providerResponse.data;
           }
         } catch (providerErr) {
           console.error("Error fetching provider data during registration:", providerErr);
@@ -249,7 +289,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       let errorMessage = "Registration failed";
       if (err.response) {
-        errorMessage = err.response.data.message || 'Server error';
+        errorMessage = err.response.data?.message || 'Server error';
       } else if (err.request) {
         errorMessage = 'No response from server';
       } else {
@@ -267,10 +307,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     setLoading(true);
     try {
-      await apiClient.post("/auth/forgot-password", { email });
-    } catch (err) {
-      const apiErr = err as ApiError;
-      setError(apiErr.message || "Failed to send reset email");
+      await axios.post(`${API_BASE_URL}/auth/forgot-password`, { email });
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || "Failed to send reset email";
+      setError(errorMessage);
       throw err;
     } finally {
       setLoading(false);
@@ -281,10 +321,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     setLoading(true);
     try {
-      await apiClient.post("/auth/reset-password", { token: resetToken, password });
-    } catch (err) {
-      const apiErr = err as ApiError;
-      setError(apiErr.message || "Reset failed");
+      await axios.post(`${API_BASE_URL}/auth/reset-password`, { token: resetToken, password });
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || "Reset failed";
+      setError(errorMessage);
       throw err;
     } finally {
       setLoading(false);
@@ -295,10 +335,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     setLoading(true);
     try {
-      await apiClient.post("/auth/change-password", data);
-    } catch (err) {
-      const apiErr = err as ApiError;
-      setError(apiErr.message || "Change password failed");
+      await axios.post(`${API_BASE_URL}/auth/change-password`, data, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || "Change password failed";
+      setError(errorMessage);
       throw err;
     } finally {
       setLoading(false);
@@ -309,7 +353,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     setLoading(true);
     try {
-      const updated = await apiClient.put<UserWithProvider>("/auth/profile", data);
+      const response = await axios.put(`${API_BASE_URL}/auth/profile`, data, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const updated = response.data;
       
       // Preserve provider data if it existed
       if (user?.provider && !updated.provider) {
@@ -319,9 +370,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(updated);
       localStorage.setItem("user", JSON.stringify(updated));
       return updated;
-    } catch (err) {
-      const apiErr = err as ApiError;
-      setError(apiErr.message || "Profile update failed");
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || "Profile update failed";
+      setError(errorMessage);
       throw err;
     } finally {
       setLoading(false);
@@ -335,9 +386,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const formData = new FormData();
       formData.append("file", file);
       
-      const { profileImageUrl } = await apiClient.uploadFile<{
-        profileImageUrl: string;
-      }>("/auth/upload-avatar", formData);
+      const response = await axios.post(`${API_BASE_URL}/auth/upload-avatar`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      const { profileImageUrl } = response.data;
       
       if (user) {
         const u2 = { ...user, profileImageUrl };
@@ -345,9 +401,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem("user", JSON.stringify(u2));
       }
       return profileImageUrl;
-    } catch (err) {
-      const apiErr = err as ApiError;
-      setError(apiErr.message || "Upload failed");
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || "Upload failed";
+      setError(errorMessage);
       throw err;
     } finally {
       setLoading(false);
@@ -358,7 +414,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
-        token, // Include token in context value
+        token,
         loading,
         error,
         login,
@@ -369,7 +425,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         changePassword,
         updateProfile,
         uploadProfileImage,
-        isAuthenticated: !!token, // Use token for authentication check
+        isAuthenticated: !!token,
         clearError,
       }}
     >

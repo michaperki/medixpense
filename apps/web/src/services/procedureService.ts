@@ -104,7 +104,7 @@ export class ProcedureService {
    * Get all available procedure categories
    */
   async getCategories(): Promise<CategoriesResponse> {
-    return apiClient.get<CategoriesResponse>('/api/procedures/categories');
+    return apiClient.get<CategoriesResponse>('/procedures/categories');
   }
 
   /**
@@ -116,7 +116,7 @@ export class ProcedureService {
     page?: number;
     limit?: number;
   }): Promise<TemplatesResponse> {
-    return apiClient.get<TemplatesResponse>('/api/procedures/templates', { params });
+    return apiClient.get<TemplatesResponse>('/procedures/templates', { params });
   }
 
   /**
@@ -133,48 +133,48 @@ export class ProcedureService {
     // If providerId is provided, use the specific provider endpoint
     if (params?.providerId) {
       const { providerId, ...restParams } = params;
-      return apiClient.get<ProceduresResponse>(`/api/providers/${providerId}/procedures`, { 
+      return apiClient.get<ProceduresResponse>(`/providers/${providerId}/procedures`, { 
         params: restParams 
       });
     }
     
     // Otherwise use the general endpoint
-    return apiClient.get<ProceduresResponse>('/api/procedures/provider', { params });
+    return apiClient.get<ProceduresResponse>('/procedures/provider', { params });
   }
 
   /**
    * Get details for a specific procedure
    */
   async getProcedureById(id: string): Promise<ProcedureResponse> {
-    return apiClient.get<ProcedureResponse>(`/api/procedures/${id}`);
+    return apiClient.get<ProcedureResponse>(`/procedures/${id}`);
   }
 
   /**
    * Add a new procedure price for a location
    */
   async addPrice(data: CreateProcedureRequest): Promise<ProcedureResponse> {
-    return apiClient.post<ProcedureResponse>('/api/procedures/price', data);
+    return apiClient.post<ProcedureResponse>('/procedures/price', data);
   }
 
   /**
    * Update the price of an existing procedure
    */
   async updatePrice(id: string, data: UpdateProcedureRequest): Promise<ProcedureResponse> {
-    return apiClient.put<ProcedureResponse>(`/api/procedures/price/${id}`, data);
+    return apiClient.put<ProcedureResponse>(`/procedures/price/${id}`, data);
   }
 
   /**
    * Delete a procedure price
    */
   async deletePrice(id: string): Promise<void> {
-    return apiClient.delete<void>(`/api/procedures/price/${id}`);
+    return apiClient.delete<void>(`/procedures/price/${id}`);
   }
 
   /**
    * Bulk update procedure prices by percentage
    */
   async bulkUpdatePrices(data: BulkUpdatePriceRequest): Promise<{ updatedCount: number }> {
-    return apiClient.post<{ updatedCount: number }>('/api/procedures/price/bulk', data);
+    return apiClient.post<{ updatedCount: number }>('/procedures/price/bulk', data);
   }
 
   /**
@@ -184,7 +184,7 @@ export class ProcedureService {
     locationId?: string;
     radius?: number;
   }): Promise<StatsResponse> {
-    return apiClient.get<StatsResponse>(`/api/procedures/stats/${templateId}`, { params });
+    return apiClient.get<StatsResponse>(`/procedures/stats/${templateId}`, { params });
   }
 
   /**

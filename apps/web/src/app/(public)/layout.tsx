@@ -55,7 +55,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       </header>
       
       {/* Main content */}
-      <main className="flex-grow">
+      <main className="flex-grow bg-white">
         {children}
       </main>
       
