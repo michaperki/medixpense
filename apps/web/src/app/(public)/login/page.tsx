@@ -28,60 +28,49 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="card max-w-md w-full shadow-md">
-        <div className="card-header">
-          <h2 className="text-center text-2xl font-bold">Login</h2>
-        </div>
+    <div className="flex items-center justify-center" style={{ minHeight: "100vh" }}>
+      <div className="card shadow-lg p-6" style={{ maxWidth: "500px" }}>
+        <h2 className="text-center text-2xl mb-6">Login</h2>
         
-        <div className="card-body">
-          {error && (
-            <div className="alert alert-error mb-4">
-              <p className="alert-message">{error}</p>
-            </div>
-          )}
+        <form onSubmit={handleSubmit}>
+          {error && <p className="text-danger mb-4">{error}</p>}
           
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="email" className="form-label text-muted">Email</label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="form-input darker-placeholder"
-                placeholder="provider@medixpense.com"
-              />
-            </div>
-            
-            <div className="form-group">
-              <label htmlFor="password" className="form-label text-muted">Password</label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="form-input darker-placeholder"
-                placeholder="••••••••"
-              />
-            </div>
-            
-            <div className="mt-6">
-              <button
-                type="submit"
-                className="btn btn-primary w-full"
-              >
-                Sign In
-              </button>
-            </div>
-          </form>
-        </div>
+          <div className="mb-4">
+            <label htmlFor="email" className="block mb-2 text-muted">Email</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="w-full"
+              placeholder="provider@medixpense.com"
+            />
+          </div>
+          
+          <div className="mb-6">
+            <label htmlFor="password" className="block mb-2 text-muted">Password</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          
+          <button
+            type="submit"
+            className="btn-primary w-full py-3"
+          >
+            Sign In
+          </button>
+        </form>
       </div>
     </div>
   );

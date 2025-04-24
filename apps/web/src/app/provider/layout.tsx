@@ -1,9 +1,8 @@
-// src/app/provider/layout.tsx
 'use client';
 
 import { useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
 import {
   UserIcon,
@@ -17,6 +16,7 @@ import {
 export default function ProviderLayout({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated, loading, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname(); // Get the current path
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -33,27 +33,40 @@ export default function ProviderLayout({ children }: { children: React.ReactNode
     );
   }
 
+  // Function to determine if a link is active
+  const isActive = (path: string) => {
+    return pathname === path;
+  };
+
+  // Function to get the appropriate class based on active state
+  const getLinkClass = (path: string) => {
+    const baseClasses = "flex items-center px-6 py-3";
+    return isActive(path) 
+      ? `${baseClasses} bg-blue-700 text-white font-medium` 
+      : `${baseClasses} text-blue-100 hover:bg-blue-700`;
+  };
+
   return (
     <div className="min-h-screen flex">
       {/* Sidebar */}
-      <div className="bg-blue-800 text-white w-64 flex-shrink-0 hidden md:block">
+      <div className="bg-blue-800 text-white w-64 flex-shrink-0">
         <div className="p-4 flex items-center">
-          <Link href="/" className="text-xl font-bold">Medixpense</Link>
+          <Link href="/" className="text-xl font-bold text-white hover:text-white">Medixpense</Link>
           <span className="ml-2 px-2 py-1 text-xs bg-blue-600 rounded">Provider</span>
         </div>
         <nav className="mt-8">
           <div className="px-4 pb-2">
             <p className="text-xs uppercase tracking-wider text-blue-300">Main</p>
           </div>
-          <Link href="/provider/dashboard" className="flex items-center px-6 py-3 text-white hover:bg-blue-700">
+          <Link href="/provider/dashboard" className={getLinkClass('/provider/dashboard')}>
             <ChartBarIcon className="h-5 w-5" />
             <span className="ml-3">Dashboard</span>
           </Link>
-          <Link href="/provider/locations" className="flex items-center px-6 py-3 text-blue-100 hover:bg-blue-700">
+          <Link href="/provider/locations" className={getLinkClass('/provider/locations')}>
             <MapPinIcon className="h-5 w-5" />
             <span className="ml-3">Locations</span>
           </Link>
-          <Link href="/provider/procedures" className="flex items-center px-6 py-3 text-blue-100 hover:bg-blue-700">
+          <Link href="/provider/procedures" className={getLinkClass('/provider/procedures')}>
             <ClipboardDocumentListIcon className="h-5 w-5" />
             <span className="ml-3">Procedures</span>
           </Link>
@@ -61,11 +74,11 @@ export default function ProviderLayout({ children }: { children: React.ReactNode
           <div className="px-4 pb-2 mt-8">
             <p className="text-xs uppercase tracking-wider text-blue-300">Account</p>
           </div>
-          <Link href="/provider/profile" className="flex items-center px-6 py-3 text-blue-100 hover:bg-blue-700">
+          <Link href="/provider/profile" className={getLinkClass('/provider/profile')}>
             <UserIcon className="h-5 w-5" />
             <span className="ml-3">Profile</span>
           </Link>
-          <Link href="/provider/settings" className="flex items-center px-6 py-3 text-blue-100 hover:bg-blue-700">
+          <Link href="/provider/settings" className={getLinkClass('/provider/settings')}>
             <Cog6ToothIcon className="h-5 w-5" />
             <span className="ml-3">Settings</span>
           </Link>
