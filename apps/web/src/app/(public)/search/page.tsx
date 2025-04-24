@@ -132,91 +132,88 @@ export default function SearchPage() {
   return (
     <div className="bg-white">
       {/* Search Form */}
+
+      {/* Search Form - Horizontal Layout */}
       <div className="bg-primary">
         <div className="container py-6">
-          <form onSubmit={handleSearch} className="form-layout">
-            <div className="form-row">
-              <div className="form-col">
-                <label htmlFor="procedureSearch" className="form-label text-white">
-                  Procedure
-                </label>
-                <div className="form-control-icon">
-                  <div className="form-control-icon-start">
-                    <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    type="text"
-                    id="procedureSearch"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="form-input"
-                    placeholder="MRI, X-ray, Physical Therapy, etc."
-                    style={{ color: 'var(--color-gray-800)' }}
+          <form onSubmit={handleSearch} className="flex flex-row items-center justify-between space-x-4">
+            <div className="w-1/3">
+              <label htmlFor="procedureSearch" className="text-white mb-1 block">
+                Procedure
+              </label>
+                <div className="relative">
+                  <MagnifyingGlassIcon
+                    className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 pointer-events-none"
                   />
+
+                    <input
+                      type="text"
+                      id="procedureSearch"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="block w-full rounded-md border border-gray-300 py-2 pr-3
+                                 placeholder:text-gray-500 focus:border-primary-500 focus:ring-primary-500"
+                      style={{ paddingLeft: '2rem', color: 'var(--color-gray-800)' }}   // 👈  icon (1.25 rem) + gap
+                      placeholder="MRI, X-ray, Physical Therapy, etc."
+                    />
                 </div>
-              </div>
-              
-              <div className="form-col">
-                <label htmlFor="locationSearch" className="form-label text-white">
-                  Location
-                </label>
-                <div className="form-control-icon">
-                  <div className="form-control-icon-start">
-                    <MapPinIcon className="h-5 w-5 text-gray-400" />
-                  </div>
+            </div>
+            
+            <div className="w-1/3">
+              <label htmlFor="locationSearch" className="text-white mb-1 block">
+                Location
+              </label>
+                <div className="relative">
+                  <MapPinIcon
+                    className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 pointer-events-none"
+                  />
+
                   <input
                     type="text"
                     id="locationSearch"
                     value={locationTerm}
                     onChange={(e) => setLocationTerm(e.target.value)}
-                    className="form-input"
                     placeholder="City, State or ZIP"
-                    style={{ color: 'var(--color-gray-800)' }}
+                    /* 2 rem (≈32 px) leaves room for the icon + a small gap */
+                    style={{ paddingLeft: '2rem', color: 'var(--color-gray-800)' }}
+                    className="block w-full rounded-md border border-gray-300 py-2 pr-3
+                               placeholder:text-gray-500 focus:border-primary-500 focus:ring-primary-500"
                   />
                 </div>
-              </div>
-              
-              <div className="form-col">
-                <label htmlFor="categoryFilter" className="form-label text-white">
-                  Category
-                </label>
-                <select
-                  id="categoryFilter"
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="form-select"
-                  style={{ color: 'var(--color-gray-800)' }}
-                >
-                  <option value="">All Categories</option>
-                  {loadingCategories ? (
-                    <option disabled>Loading categories...</option>
-                  ) : (
-                    categories.map(category => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-              
-              <div className="form-col flex items-end">
-                <button
-                  type="submit"
-                  className="btn"
-                  style={{ 
-                    backgroundColor: 'var(--color-primary-700)',
-                    color: 'var(--color-white)',
-                    border: '1px solid var(--color-primary-800)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  <MagnifyingGlassIcon className="h-5 w-5 mr-2" />
-                  Search
-                </button>
-              </div>
+            </div>
+            
+            <div className="w-1/4">
+              <label htmlFor="categoryFilter" className="text-white mb-1 block">
+                Category
+              </label>
+              <select
+                id="categoryFilter"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md appearance-none"
+                style={{ color: 'var(--color-gray-800)' }}
+              >
+                <option value="">All Categories</option>
+                {loadingCategories ? (
+                  <option disabled>Loading categories...</option>
+                ) : (
+                  categories.map(category => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+            
+            <div className="flex items-end pb-1">
+              <button
+                type="submit"
+                className="search-button"
+              >
+                <MagnifyingGlassIcon className="h-5 w-5 mr-2" />
+                Search
+              </button>
             </div>
           </form>
         </div>
