@@ -94,49 +94,55 @@ export default function ProcedureMap({
         fullscreenControl: true
       }}
     >
-      {results.map((result) => (
-        <Marker
-          key={result.id}
-          position={{ lat: result.location.latitude, lng: result.location.longitude }}
-          onClick={() => onMarkerClick?.(result)}
-          icon={{
-            path: window.google.maps.SymbolPath.CIRCLE,
-            scale: selectedMarker?.id === result.id ? 10 : 6,
-            fillColor: selectedMarker?.id === result.id ? '#2563EB' : '#FFFFFF',
-            fillOpacity: 1,
-            strokeWeight: 2,
-            strokeColor: '#2563EB'
-          }}
-        >
-          {selectedMarker?.id === result.id && (
-            <InfoWindow onCloseClick={() => onMarkerClick?.(null)}>
-              <div className="space-y-2">
-                <div className="flex justify-between items-start">
-                  <h3 className="text-sm font-medium text-gray-900 pr-4">{result.procedure.name}</h3>
-                  <span className="text-sm font-semibold text-blue-600">{formatPrice(result.price)}</span>
+      {results.map((result) => {
+        // Check if this marker is selected
+        const isSelected = selectedMarker?.id === result.id;
+        
+        return (
+          <Marker
+            key={result.id}
+            position={{ lat: result.location.latitude, lng: result.location.longitude }}
+            onClick={() => onMarkerClick?.(result)}
+            icon={{
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: isSelected ? 10 : 6,
+              fillColor: isSelected ? '#2563EB' : '#FFFFFF',
+              fillOpacity: 1,
+              strokeWeight: 2,
+              strokeColor: '#2563EB'
+            }}
+          >
+            {/* Only render InfoWindow if we have a selectedMarker AND this marker is selected */}
+            {selectedMarker && isSelected && (
+              <InfoWindow onCloseClick={() => onMarkerClick?.(null)}>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-start">
+                    <h3 className="text-sm font-medium text-gray-900 pr-4">{result.procedure.name}</h3>
+                    <span className="text-sm font-semibold text-blue-600">{formatPrice(result.price)}</span>
+                  </div>
+                  <div className="flex space-x-2">
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">{result.procedure.category.name}</span>
+                    {result.distance !== undefined && <span className="text-xs text-gray-500">{formatDistance(result.distance)}</span>}
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-gray-200">
+                    <p className="text-xs font-medium text-gray-900">{result.location.provider.name}</p>
+                    <p className="mt-1 text-xs text-gray-500 flex items-center"><MapPinIcon className="h-3 w-3 mr-1"/>{result.location.address}, {result.location.city}</p>
+                  </div>
+                  <div className="mt-2 flex justify-between">
+                    <Link href={`/locations/${result.location.id}`} className="text-xs font-medium text-gray-700 underline">Details</Link>
+                    <Link
+                      href={`https://maps.google.com/?q=${encodeURIComponent(result.location.address + ', ' + result.location.city + ', ' + result.location.state)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium text-blue-600 underline"
+                    >Directions</Link>
+                  </div>
                 </div>
-                <div className="flex space-x-2">
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">{result.procedure.category.name}</span>
-                  {result.distance !== undefined && <span className="text-xs text-gray-500">{formatDistance(result.distance)}</span>}
-                </div>
-                <div className="mt-2 pt-2 border-t border-gray-200">
-                  <p className="text-xs font-medium text-gray-900">{result.location.provider.name}</p>
-                  <p className="mt-1 text-xs text-gray-500 flex items-center"><MapPinIcon className="h-3 w-3 mr-1"/>{result.location.address}, {result.location.city}</p>
-                </div>
-                <div className="mt-2 flex justify-between">
-                  <Link href={`/locations/${result.location.id}`} className="text-xs font-medium text-gray-700 underline">Details</Link>
-                  <Link
-                    href={`https://maps.google.com/?q=${encodeURIComponent(result.location.address + ', ' + result.location.city + ', ' + result.location.state)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs font-medium text-blue-600 underline"
-                  >Directions</Link>
-                </div>
-              </div>
-            </InfoWindow>
-          )}
-        </Marker>
-      ))}
+              </InfoWindow>
+            )}
+          </Marker>
+        );
+      })}
     </GoogleMap>
   );
 }

@@ -1,0 +1,247 @@
+/*******************************
+ * MEDIXPENSE SPECIFIC STYLES
+ *******************************/
+/* Search Results Page */
+.results-card {
+  background-color: var(--color-white);
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: var(--spacing-4);
+}
+
+.result-price {
+  color: var(--text-primary);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.result-savings {
+  color: var(--color-success-600);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.result-category-tag {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  background-color: var(--color-primary-100);
+  color: var(--color-primary-800);
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-full);
+}
+
+.result-distance-tag {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  background-color: var(--color-gray-100);
+  color: var(--color-gray-800);
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-full);
+}
+
+.view-mode-toggle {
+  display: flex;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.view-mode-toggle button {
+  padding: var(--spacing-2) var(--spacing-4);
+  background-color: var(--color-white);
+  color: var(--color-gray-700);
+  border: none;
+  font-weight: var(--font-weight-medium);
+}
+
+.view-mode-toggle button.active {
+  background-color: var(--color-primary-600);
+  color: var(--color-white);
+}
+
+/* Hero Section */
+.hero {
+  background: linear-gradient(to right, var(--color-primary-600), var(--color-primary-700));
+  padding: var(--spacing-16) 0;
+  color: var(--color-white);
+}
+
+.hero h1 {
+  color: var(--color-white);
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-extrabold);
+}
+
+.hero p {
+  color: var(--color-primary-100);
+  font-size: var(--font-size-lg);
+}
+
+.search-box {
+  background-color: var(--color-white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  padding: var(--spacing-6);
+  max-width: 100%;
+}
+
+/* Price Info Box */
+.price-info-box {
+  background-color: var(--color-white);
+  padding: var(--spacing-4);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.price-info-box h2 {
+  color: var(--text-primary);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--spacing-3);
+}
+
+.price-info-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-2);
+}
+
+.price-info-label {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.price-info-value {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Blue Background Form Overrides */
+.bg-blue-600 input,
+.bg-blue-600 select,
+.bg-blue-600 textarea {
+  background-color: var(--color-white);
+  color: var(--color-gray-800);
+  border-color: var(--border-color);
+}
+
+.bg-blue-600 label {
+  color: var(--color-white);
+}
+
+.bg-blue-600 .bg-blue-700 {
+  background-color: var(--color-primary-700);
+  color: var(--color-white);
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--spacing-6);
+}
+
+.pagination-button {
+  padding: var(--spacing-1) var(--spacing-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  background-color: var(--color-white);
+}
+
+.pagination-button:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+/* Loading spinner */
+.loading-spinner {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-12) 0;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+  border-top: 2px solid var(--color-primary-500);
+  border-bottom: 2px solid var(--color-primary-500);
+  border-radius: 50%;
+  height: 3rem;
+  width: 3rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Category card specific styling */
+.category-card {
+  background-color: var(--color-white);
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.category-card h3 {
+  color: var(--color-gray-900);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+}
+
+.category-card p {
+  color: var(--color-gray-500);
+  font-size: var(--font-size-sm);
+}
+
+.darker-placeholder::placeholder {
+  color: var(--color-gray-500); /* Use a darker gray than the default --text-muted */
+}
+
+/* Add these to the bottom of your medixpense.css file */
+
+/* Fix for blue background form elements */
+.bg-primary .form-input,
+.bg-primary .form-select,
+.bg-primary .form-textarea {
+  color: var(--color-gray-800);
+}
+
+/* Fix for icons in the blue background forms */
+.bg-primary .form-control-icon-start {
+  color: var(--color-gray-400);
+}
+
+/* Custom search button for blue backgrounds */
+.bg-primary .search-button {
+  background-color: var(--color-primary-700);
+  color: var(--color-white);
+  border: 1px solid var(--color-primary-800);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-2) var(--spacing-4);
+  border-radius: var(--radius-md);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.bg-primary .search-button:hover {
+  background-color: var(--color-primary-800);
+}
+
+/* Card text color fixes for "No Procedures Found" cards */
+.card h3 {
+  color: var(--color-gray-800);
+}
+
+.card p {
+  color: var(--color-gray-600);
+}
+
+

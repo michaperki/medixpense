@@ -64,7 +64,7 @@ export default function EditProcedurePage() {
         
         // Fetch procedure details
         const response = await proceduresApi.getProcedureById(procedureId);
-        const procedureData = response.procedure;
+        const procedureData = response.procedurePrice;
         
         if (!procedureData) {
           throw new Error('Procedure not found');

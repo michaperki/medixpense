@@ -25,4 +25,12 @@ router.post('/price', verifyToken, checkRole(['PROVIDER']), validateProcedure, c
 router.put('/price/:id', verifyToken, checkRole(['PROVIDER']), updateProcedurePrice);
 router.delete('/price/:id', verifyToken, checkRole(['PROVIDER']), deleteProcedurePrice);
 
+// must come after /price/:id so it doesn’t steal that path
+router.get(
+  '/:id',
+  verifyToken,
+  checkRole(['PROVIDER']),
+  getProcedurePrice
+);
+
 export default router;

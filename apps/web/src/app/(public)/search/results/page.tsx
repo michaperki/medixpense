@@ -1,7 +1,7 @@
 // src/app/(public)/search/results/page.tsx
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { searchApi } from '@/lib/api';
@@ -19,32 +19,15 @@ const ProcedureMap = dynamic(() => import('@/components/maps/ProcedureMap'), {
   ssr: false,
   loading: () => (
     <div className="bg-gray-100 h-full w-full flex items-center justify-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500" />
+      <div className="loading-spinner">
+        <div className="spinner spinner-md"></div>
+      </div>
     </div>
   ),
 });
 
-type SearchResult = {
-  id: string;
-  price: number;
-  procedure: { id: string; name: string; description?: string; category: { id: string; name: string } };
-  location: {
-    id: string;
-    name: string;
-    address: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    provider: { id: string; name: string };
-    latitude: number;
-    longitude: number;
-  };
-  distance?: number;
-};
-
-type PriceStats = { min: number; max: number; average: number; median: number };
-
 export default function SearchResultsPage() {
+  // All your state and handlers stay the same
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -57,24 +40,22 @@ export default function SearchResultsPage() {
   const priceMin = searchParams.get('price_min') || '';
   const priceMax = searchParams.get('price_max') || '';
 
-  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [viewMode, setViewMode] = useState('list');
   const [showFilters, setShowFilters] = useState(false);
-
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [stats, setStats] = useState<PriceStats | null>(null);
+  const [results, setResults] = useState([]);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({ page, limit: 10, total: 0, pages: 0 });
-
   const [selectedDistance, setSelectedDistance] = useState(distanceRadius);
   const [selectedSort, setSelectedSort] = useState(sort);
   const [priceRangeMin, setPriceRangeMin] = useState(priceMin);
   const [priceRangeMax, setPriceRangeMax] = useState(priceMax);
   const [procedureName, setProcedureName] = useState('');
+  const [selectedResult, setSelectedResult] = useState(null);
+  const [mapCenter, setMapCenter] = useState(null);
 
-  const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
-  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
-
+  // Keep all your useEffect hooks and handlers the same
   useEffect(() => {
     // Only attempt to geocode if we have a location string and Google Maps is loaded
     if (window.google && location) {
@@ -127,88 +108,144 @@ export default function SearchResultsPage() {
     setShowFilters(false);
   };
 
-  const handlePageChange = (newPage: number) => {
+  const handlePageChange = (newPage) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('page', newPage.toString());
     router.push(`/search/results?${params.toString()}`);
     window.scrollTo(0, 0);
   };
 
-  const calculateSavings = (price: number) => (stats ? stats.average - price : null);
-  const formatDistance = (d?: number) => d === undefined ? 'Unknown' : d < 0.1 ? '<0.1 miles' : d < 10 ? d.toFixed(1) + ' miles' : Math.round(d) + ' miles';
-  const getSortText = (s: string) => ({ price_asc: 'Price: Low to High', price_desc: 'Price: High to Low', distance_asc: 'Distance: Nearest', name_asc: 'Name: A–Z', name_desc: 'Name: Z–A' }[s] || 'Relevance');
+  const calculateSavings = (price) => (stats ? stats.average - price : null);
+  const formatDistance = (d) => d === undefined ? 'Unknown' : d < 0.1 ? '<0.1 miles' : d < 10 ? d.toFixed(1) + ' miles' : Math.round(d) + ' miles';
 
-  const distanceOptions = [{ value: '5', label: '5 miles' }, { value: '10', label: '10 miles' }, { value: '25', label: '25 miles' }, { value: '50', label: '50 miles' }, { value: '100', label: '100 miles' }];
-  const sortOptions = [{ value: 'price_asc', label: 'Price: Low to High' }, { value: 'price_desc', label: 'Price: High to Low' }, { value: 'distance_asc', label: 'Distance: Nearest' }, { value: 'name_asc', label: 'Name: A–Z' }, { value: 'name_desc', label: 'Name: Z–A' }];
+  const distanceOptions = [
+    { value: '5', label: '5 miles' },
+    { value: '10', label: '10 miles' },
+    { value: '25', label: '25 miles' },
+    { value: '50', label: '50 miles' },
+    { value: '100', label: '100 miles' }
+  ];
+  
+  const sortOptions = [
+    { value: 'price_asc', label: 'Price: Low to High' },
+    { value: 'price_desc', label: 'Price: High to Low' },
+    { value: 'distance_asc', label: 'Distance: Nearest' },
+    { value: 'name_asc', label: 'Name: A–Z' },
+    { value: 'name_desc', label: 'Name: Z–A' }
+  ];
+
+  // Define text color styles to be used consistently
+  const textPrimaryStyle = { color: 'var(--color-gray-800)' };
+  const textSecondaryStyle = { color: 'var(--color-gray-600)' };
+  const textTertiaryStyle = { color: 'var(--color-gray-500)' };
+  const textWhiteStyle = { color: 'var(--color-white)' };
 
   return (
     <div className="bg-white">
       {/* Header */}
-      <div className="bg-blue-700 py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center text-white">
-            <h1 className="text-xl font-bold">{procedureName}</h1>
-            {location && <p className="text-blue-100 text-sm">Near {location}</p>}
+      <div className="bg-primary">
+        <div className="container py-6">
+          <div className="flex justify-between items-center">
+            <h1 className="page-title" style={textWhiteStyle}>{procedureName}</h1>
+            {location && <p style={{ color: 'var(--color-primary-100)' }}>{" Near " + location}</p>}
           </div>
         </div>
       </div>
 
       {/* Main */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex flex-col lg:flex-row">
-
+      <div className="container py-6">
+        <div className="two-col-layout">
           {/* Filters */}
-          <div className={`lg:w-64 flex-shrink-0 ${showFilters ? 'block' : 'hidden lg:block'}`}>
+          <div className={`two-col-sidebar ${showFilters ? 'block' : 'hidden lg:block'}`}>
             <div className="sticky top-6 space-y-6">
-              <div className="bg-white p-4 shadow rounded-lg">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-medium text-gray-900">Filters</h2>
-                  <button onClick={() => setShowFilters(false)} className="lg:hidden text-gray-400 hover:text-gray-500">
+              <div className="card">
+                <div className="card-header flex items-center justify-between">
+                  <h2 className="section-title mb-0" style={textPrimaryStyle}>Filters</h2>
+                  <button onClick={() => setShowFilters(false)} className="lg:hidden icon-btn">
                     <span className="sr-only">Close</span>
-                    <ChevronRightIcon className="h-6 w-6" />
+                    <ChevronRightIcon className="h-5 w-5" style={textSecondaryStyle} />
                   </button>
                 </div>
-                <div className="mb-6">
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">Distance</h3>
-                  <select value={selectedDistance} onChange={e => setSelectedDistance(e.target.value)} className="block w-full border-gray-300 rounded-md">
-                    {distanceOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-                <div className="mb-6">
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">Price Range</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label htmlFor="price-min" className="sr-only">Min</label>
-                      <div className="relative rounded-md shadow-sm">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><span className="text-gray-500 sm:text-sm">$</span></div>
-                        <input type="number" id="price-min" value={priceRangeMin} onChange={e => setPriceRangeMin(e.target.value)} placeholder="Min" className="block w-full pl-7 pr-3 border-gray-300 rounded-md" />
+                <div className="card-body">
+                  <div className="form-group">
+                    <label className="form-label" style={textSecondaryStyle}>Distance</label>
+                    <select 
+                      value={selectedDistance} 
+                      onChange={e => setSelectedDistance(e.target.value)} 
+                      className="form-select"
+                      style={textPrimaryStyle}
+                    >
+                      {distanceOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" style={textSecondaryStyle}>Price Range</label>
+                    <div className="form-row">
+                      <div className="form-col">
+                        <div className="form-control-icon">
+                          <div className="form-control-icon-start" style={textTertiaryStyle}>$</div>
+                          <input 
+                            type="number" 
+                            value={priceRangeMin} 
+                            onChange={e => setPriceRangeMin(e.target.value)} 
+                            placeholder="Min" 
+                            className="form-input" 
+                            style={textPrimaryStyle}
+                          />
+                        </div>
                       </div>
-                    </div>
-                    <div>
-                      <label htmlFor="price-max" className="sr-only">Max</label>
-                      <div className="relative rounded-md shadow-sm">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><span className="text-gray-500 sm:text-sm">$</span></div>
-                        <input type="number" id="price-max" value={priceRangeMax} onChange={e => setPriceRangeMax(e.target.value)} placeholder="Max" className="block w-full pl-7 pr-3 border-gray-300 rounded-md" />
+                      <div className="form-col">
+                        <div className="form-control-icon">
+                          <div className="form-control-icon-start" style={textTertiaryStyle}>$</div>
+                          <input 
+                            type="number" 
+                            value={priceRangeMax} 
+                            onChange={e => setPriceRangeMax(e.target.value)} 
+                            placeholder="Max" 
+                            className="form-input" 
+                            style={textPrimaryStyle}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
+                  <div className="form-group">
+                    <label className="form-label" style={textSecondaryStyle}>Sort By</label>
+                    <select 
+                      value={selectedSort} 
+                      onChange={e => setSelectedSort(e.target.value)} 
+                      className="form-select"
+                      style={textPrimaryStyle}
+                    >
+                      {sortOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <button onClick={handleApplyFilters} className="btn btn-primary w-full">Apply</button>
                 </div>
-                <div className="mb-6">
-                  <h3 className="text-sm font-medium text-gray-900 mb-2">Sort By</h3>
-                  <select value={selectedSort} onChange={e => setSelectedSort(e.target.value)} className="block w-full border-gray-300 rounded-md">
-                    {sortOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-                <button onClick={handleApplyFilters} className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700">Apply</button>
               </div>
+              
               {stats && (
-                <div className="bg-white p-4 shadow rounded-lg">
-                  <h2 className="text-lg font-medium text-gray-900 mb-3">Price Info</h2>
+                <div className="price-info-box">
+                  <h2 style={{ ...textPrimaryStyle, fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-medium)', marginBottom: 'var(--spacing-3)' }}>
+                    Price Info
+                  </h2>
                   <div className="space-y-2">
-                    <div className="flex justify-between"><span className="text-sm text-gray-500">Average</span><span className="text-sm font-medium">${stats.average.toFixed(2)}</span></div>
-                    <div className="flex justify-between"><span className="text-sm text-gray-500">Low</span><span className="text-sm font-medium">${stats.min.toFixed(2)}</span></div>
-                    <div className="flex justify-between"><span className="text-sm text-gray-500">High</span><span className="text-sm font-medium">${stats.max.toFixed(2)}</span></div>
-                    <div className="flex justify-between"><span className="text-sm text-gray-500">Median</span><span className="text-sm font-medium">${stats.median.toFixed(2)}</span></div>
+                    <div className="price-info-row">
+                      <span style={textTertiaryStyle}>Average</span>
+                      <span style={textPrimaryStyle}>${stats.average.toFixed(2)}</span>
+                    </div>
+                    <div className="price-info-row">
+                      <span style={textTertiaryStyle}>Low</span>
+                      <span style={textPrimaryStyle}>${stats.min.toFixed(2)}</span>
+                    </div>
+                    <div className="price-info-row">
+                      <span style={textTertiaryStyle}>High</span>
+                      <span style={textPrimaryStyle}>${stats.max.toFixed(2)}</span>
+                    </div>
+                    <div className="price-info-row">
+                      <span style={textTertiaryStyle}>Median</span>
+                      <span style={textPrimaryStyle}>${stats.median.toFixed(2)}</span>
+                    </div>
                   </div>
                 </div>
               )}
@@ -216,79 +253,136 @@ export default function SearchResultsPage() {
           </div>
 
           {/* Results */}
-          <div className="lg:flex-1 lg:ml-8 mt-6 lg:mt-0">
+          <div className="two-col-main">
             {/* Mobile Header */}
             <div className="lg:hidden flex justify-between mb-4">
-              <button onClick={() => setShowFilters(true)} className="px-3 py-2 border rounded-md"><AdjustmentsHorizontalIcon className="h-4 w-4" /></button>
-              <div className="flex border rounded-md">
-                <button onClick={() => setViewMode('list')} className={`${viewMode==='list'? 'bg-blue-600 text-white':'bg-white'} px-3 py-2`}><ListBulletIcon className="h-4 w-4" /></button>
-                <button onClick={() => setViewMode('map')} className={`${viewMode==='map'? 'bg-blue-600 text-white':'bg-white'} px-3 py-2`}><MapIcon className="h-4 w-4" /></button>
+              <button onClick={() => setShowFilters(true)} className="icon-btn">
+                <AdjustmentsHorizontalIcon className="h-5 w-5" style={textSecondaryStyle} />
+              </button>
+              <div className="view-mode-toggle">
+                <button 
+                  onClick={() => setViewMode('list')} 
+                  className={viewMode === 'list' ? 'active' : ''}
+                >
+                  <ListBulletIcon className="h-5 w-5" />
+                </button>
+                <button 
+                  onClick={() => setViewMode('map')} 
+                  className={viewMode === 'map' ? 'active' : ''}
+                >
+                  <MapIcon className="h-5 w-5" />
+                </button>
               </div>
             </div>
 
             {/* Desktop Header */}
             <div className="hidden lg:flex justify-between items-center mb-4">
-              <h2 className="text-lg font-medium text-gray-900">{loading ? 'Searching...' : error ? 'Error' : `${pagination.total} results`}</h2>
-              <div className="flex border rounded-md">
-                <button onClick={() => setViewMode('list')} className={`${viewMode==='list'? 'bg-blue-600 text-white':'bg-white'} px-4 py-2`}><ListBulletIcon className="h-4 w-4 mr-1" />List</button>
-                <button onClick={() => setViewMode('map')} className={`${viewMode==='map'? 'bg-blue-600 text-white':'bg-white'} px-4 py-2`}><MapIcon className="h-4 w-4 mr-1" />Map</button>
+              <h2 className="section-title mb-0" style={textPrimaryStyle}>
+                {loading ? 'Searching...' : error ? 'Error' : `${pagination.total} results`}
+              </h2>
+              <div className="view-mode-toggle">
+                <button 
+                  onClick={() => setViewMode('list')} 
+                  className={viewMode === 'list' ? 'active' : ''}
+                >
+                  <ListBulletIcon className="h-5 w-5 mr-1" />List
+                </button>
+                <button 
+                  onClick={() => setViewMode('map')} 
+                  className={viewMode === 'map' ? 'active' : ''}
+                >
+                  <MapIcon className="h-5 w-5 mr-1" />Map
+                </button>
               </div>
             </div>
 
             {error && (
-              <div className="p-4 bg-red-50 text-red-700 rounded-md">{error}</div>
+              <div className="alert alert-error">
+                <div className="alert-message">{error}</div>
+              </div>
             )}
+            
             {loading && (
-              <div className="flex justify-center py-12"><div className="animate-spin h-12 w-12 border-t-2 border-b-2 border-blue-500 rounded-full" /></div>
+              <div className="loading-spinner">
+                <div className="spinner spinner-md"></div>
+              </div>
             )}
+            
             {!loading && !error && results.length === 0 && (
-              <div className="text-center py-12">
-                <MapPinIcon className="mx-auto h-12 w-12 text-gray-400" />
-                <p className="mt-2 text-gray-500">No results found.</p>
+              <div className="empty-state">
+                <MapPinIcon className="empty-state-icon" />
+                <h3 className="empty-state-title" style={textPrimaryStyle}>No results found.</h3>
+                <p className="empty-state-message" style={textSecondaryStyle}>Try adjusting your search criteria or filters.</p>
               </div>
             )}
 
             {!loading && !error && results.length > 0 && (
               viewMode === 'list' ? (
-                <div className="space-y-4">
+                <div className="content-block">
                   {results.map(r => (
-                    <div key={r.id} className="bg-white shadow rounded-lg overflow-hidden">
-                      <div className="p-6 flex justify-between items-start">
+                    <div key={r.id} className="results-card">
+                      <div className="p-6 flex flex-col md:flex-row md:justify-between md:items-start">
                         <div>
-                          <h3 className="text-lg font-medium text-gray-900">{r.procedure.name}</h3>
-                          <p className="text-sm text-gray-500 truncate max-w-md">{r.procedure.description}</p>
+                          <h3 className="text-lg font-semibold" style={textPrimaryStyle}>{r.procedure.name}</h3>
+                          <p style={textSecondaryStyle} className="truncate max-w-md">{r.procedure.description}</p>
                           <div className="mt-2 flex space-x-2">
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">{r.procedure.category.name}</span>
-                            {r.distance && <span className="px-2 py-0.5 bg-gray-100 text-gray-800 text-xs rounded-full">{formatDistance(r.distance)}</span>}
+                            <span className="result-category-tag">{r.procedure.category.name}</span>
+                            {r.distance && <span className="result-distance-tag">{formatDistance(r.distance)}</span>}
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold">${r.price.toFixed(2)}</p>
-                          {calculateSavings(r.price) && <p className="text-sm text-green-600">Save ${calculateSavings(r.price)!.toFixed(2)}</p>}
+                        <div className="mt-4 md:mt-0 flex flex-col items-end">
+                          <div className="result-price" style={textPrimaryStyle}>${r.price.toFixed(2)}</div>
+                          {calculateSavings(r.price) && calculateSavings(r.price) > 0 && (
+                            <div className="result-savings">Save ${calculateSavings(r.price).toFixed(2)}</div>
+                          )}
                         </div>
                       </div>
-                      <div className="px-6 pb-6 flex justify-between items-center border-t">
+                      <div className="card-footer flex justify-between items-center">
                         <div>
-                          <p className="text-sm text-gray-900 font-medium">{r.location.provider.name}</p>
-                          <p className="text-xs text-gray-500">{r.location.address}, {r.location.city}</p>
+                          <p className="font-medium" style={textPrimaryStyle}>{r.location.provider.name}</p>
+                          <p className="text-sm" style={textTertiaryStyle}>{r.location.address}, {r.location.city}</p>
                         </div>
                         <div className="flex space-x-2">
-                          <Link href={`/locations/${r.location.id}`} className="px-3 py-2 border rounded-md text-sm">Details</Link>
-                          <button onClick={() => {setSelectedResult(r); setViewMode('map');}} className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm">Map</button>
+                          <Link href={`/locations/${r.location.id}`} className="btn btn-secondary btn-sm">Details</Link>
+                          <button onClick={() => {setSelectedResult(r); setViewMode('map');}} className="btn btn-primary btn-sm">Map</button>
                         </div>
                       </div>
                     </div>
                   ))}
                   {pagination.pages > 1 && (
-                    <div className="flex justify-between items-center">
-                      <button onClick={() => handlePageChange(pagination.page - 1)} disabled={pagination.page === 1} className="px-3 py-1 border rounded-md">Previous</button>
-                      <button onClick={() => handlePageChange(pagination.page + 1)} disabled={pagination.page === pagination.pages} className="px-3 py-1 border rounded-md">Next</button>
+                    <div className="pagination">
+                      <button 
+                        onClick={() => handlePageChange(pagination.page - 1)} 
+                        disabled={pagination.page === 1} 
+                        className="pagination-button"
+                        style={{ color: '#4b5563' }} // Force text color for the button text
+                      >
+                        <ChevronLeftIcon className="h-4 w-4 mr-1" />
+                        Previous
+                      </button>
+                      <span style={{ color: '#4b5563' }}>
+                        Page {pagination.page} of {pagination.pages}
+                      </span>
+                      <button 
+                        onClick={() => handlePageChange(pagination.page + 1)} 
+                        disabled={pagination.page === pagination.pages} 
+                        className="pagination-button"
+                        style={{ color: '#4b5563' }} // Force text color for the button text
+                      >
+                        Next
+                        <ChevronRightIcon className="h-4 w-4 ml-1" />
+                      </button>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="h-[calc(100vh-220px)] rounded-lg overflow-hidden">
-                  <ProcedureMap results={results} center={mapCenter || undefined} onMarkerClick={setSelectedResult} selectedMarker={selectedResult} />
+                <div className="card" style={{ height: "calc(100vh - 220px)" }}>
+                  <ProcedureMap 
+                    results={results} 
+                    center={mapCenter || undefined} 
+                    onMarkerClick={setSelectedResult} 
+                    selectedMarker={selectedResult} 
+                  />
                 </div>
               )
             )}
