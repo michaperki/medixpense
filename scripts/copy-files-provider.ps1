@@ -1,4 +1,3 @@
-
 <#
 .SYNOPSIS
   Copy an ASCII file-tree under the current repo (names only, no full paths) plus selected files.
@@ -9,14 +8,11 @@
 param(
   [int]$Depth = [int]::MaxValue
 )
-
 # where we start
 $repoRoot = Resolve-Path "$PSScriptRoot\.."
 $repoName = Split-Path $repoRoot -Leaf
-
 # folders/files to skip
 $exclude = 'node_modules','.git','.next','.vscode','dist','build','*.log'
-
 function Get-TreeLines {
   param(
     [string]$Path,
@@ -24,11 +20,9 @@ function Get-TreeLines {
     [int]$Level = 1
   )
   if ($Level -gt $Depth) { return @() }
-
   $items = Get-ChildItem -LiteralPath $Path `
             | Where-Object { $exclude -notcontains $_.Name } `
             | Sort-Object PSIsContainer, Name -Descending
-
   $out = @()
   for ($i=0; $i -lt $items.Count; $i++) {
     $item = $items[$i]
@@ -43,10 +37,10 @@ function Get-TreeLines {
   }
   return $out
 }
-
 # build and copy
 $tree  = @("├── $repoName") + (Get-TreeLines -Path $repoRoot -Prefix '│   ')
 $files = @(
+  # Original files
   'apps\api\.env',
   'apps\api\package.json',
   'apps\api\src\index.js',
@@ -56,9 +50,25 @@ $files = @(
   'apps\api\src\controllers\locationsController.jsx',
   'apps\web\src\lib\api.ts',
   'apps\web\src\lib\apiClient.ts',
-  'apps\web\src\app\context\AuthContext.tsx'
+  'apps\web\src\app\context\AuthContext.tsx',
+  
+  # Profile related files
+  'apps\web\src\app\provider\profile\page.tsx',
+  'apps\web\src\app\provider\settings\page.tsx',
+  'apps\web\src\components\profile\ProfileForm.jsx',
+  'apps\web\src\components\profile\ProfileHeader.jsx',
+  'apps\web\src\components\settings\SettingsForm.jsx',
+  'apps\web\src\components\settings\SecuritySettings.jsx',
+  'apps\web\src\components\settings\NotificationSettings.jsx',
+  'apps\web\src\services\profileService.ts',
+  'apps\web\src\services\settingsService.ts',
+  'apps\api\src\routes\profile.js',
+  'apps\api\src\routes\settings.js',
+  'apps\api\src\controllers\profileController.js',
+  'apps\api\src\controllers\settingsController.js',
+  'apps\api\src\validation\profile.js',
+  'apps\api\src\validation\settings.js'
 )
-
 $output = @("// --- FILE TREE ---") + $tree + ''
 foreach ($f in $files) {
   $full = Join-Path $repoRoot $f
@@ -68,7 +78,5 @@ foreach ($f in $files) {
     $output += ''
   }
 }
-
 $output -join "`r`n" | Set-Clipboard
 Write-Host "✅ Copied tree + $($files.Count) files to clipboard"
-

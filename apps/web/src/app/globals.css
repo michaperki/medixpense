@@ -29,3 +29,78 @@ body {
 .js-focus-visible :focus:not(.focus-visible) {
   outline: none;
 }
+
+/* Add this to your globals.css file */
+
+/* Simple, targeted fixes for text contrast */
+input, textarea, select {
+  color: #000000;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #6b7280;
+}
+
+/* Fix for labels */
+form label {
+  color: #000000;
+}
+
+/* Fix for paragraphs in forms */
+form p {
+  color: #000000;
+}
+
+
+/* Add this to your global styles file */
+
+/* Ensure modals appear above all other content */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+}
+
+.modal-content {
+  position: relative;
+  margin: auto;
+  background-color: white;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  z-index: 10000;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  max-width: 32rem;
+  width: 100%;
+}
+
+/* Prevent modal from being hidden by other elements */
+.modal-content * {
+  z-index: 10001;
+}
+
+/* Disable page scrolling when modal is open */
+body.modal-open {
+  overflow: hidden;
+  padding-right: 15px; /* Prevent layout shift */
+}
+
+/* Force modal on top of all other elements */
+[data-modal-overlay="true"] {
+  isolation: isolate;
+}

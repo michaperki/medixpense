@@ -128,6 +128,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     setLoading(true);
     
+    console.log('Login credentials before API call:', { email, password });
+
     // Validate inputs before making the API call
     if (!email || !password) {
       setError("Email and password are required");

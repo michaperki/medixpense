@@ -10,6 +10,9 @@ import locationRoutes from './routes/locations.js';
 import providerRoutes from './routes/providers.js';
 import procedureRoutes from './routes/procedures.js'; // Add this import
 import searchRoutes from './routes/search.js'; // Add this if not present
+import profileRoutes from './routes/profile.js';
+import settingsRoutes from './routes/settings.js';
+
 
 const app = express();
 const prisma = new PrismaClient();
@@ -35,6 +38,9 @@ app.use('/api/locations', locationRoutes);
 app.use('/api/providers', providerRoutes);
 app.use('/api/procedures', procedureRoutes); // Add this line
 app.use('/api/search', searchRoutes); // Add this if not present
+// Add these route handlers
+app.use('/api/profile', profileRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {

@@ -1,6 +1,7 @@
 // packages/database/prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -9,16 +10,26 @@ datasource db {
 }
 
 model User {
-  id                String    @id @default(uuid())
-  email             String    @unique
+  id                String           @id @default(uuid())
+  email             String           @unique
   passwordHash      String
   firstName         String?
   lastName          String?
-  role              Role      @default(PROVIDER)
-  status            Status    @default(ACTIVE)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  phone             String?
+  profileImageUrl   String?
+  role              Role             @default(PROVIDER)
+  status            Status           @default(ACTIVE)
+  twoFactorEnabled  Boolean          @default(false)
+  twoFactorSecret   String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  // Relations
   provider          Provider?
+  providerSettings  ProviderSettings?
+  adminSettings     AdminSettings?
+  
+  // Password reset
   resetToken        String?
   resetTokenExpires DateTime?
 
@@ -26,28 +37,82 @@ model User {
 }
 
 model Provider {
-  id            String     @id @default(uuid())
-  userId        String     @unique
-  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organizationName String
-  phone         String?
-  website       String?
-  bio           String?
-  logoUrl       String?
-  stripeCustomerId String?
-  subscriptionStatus SubscriptionStatus @default(INACTIVE)
-  subscriptionTier String?
-  locations     Location[]
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id                String     @id @default(uuid())
+  userId            String     @unique
+  organizationName  String
+  phone             String?
+  website           String?
+  bio               String?
+  logoUrl           String?
+  address           String?
+  city              String?
+  state             String?
+  zipCode           String?
+  stripeCustomerId  String?
+  subscriptionStatus SubscriptionStatus @default(ACTIVE)  // Changed default to ACTIVE
+  subscriptionTier  String?
+  
+  // Relations
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  locations         Location[]
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
   @@map("providers")
+}
+
+model ProviderSettings {
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  general       String?   // JSON string for general settings
+  notifications String?   // JSON string for notification settings
+  security      String?   // JSON string for security settings
+  billing       String?   // JSON string for billing settings
+  
+  // Relations
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("provider_settings")
+}
+
+model AdminSettings {
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  dashboard     String?   // JSON string for dashboard settings
+  notifications String?   // JSON string for notification settings
+  security      String?   // JSON string for security settings
+  
+  // Relations
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("admin_settings")
+}
+
+model SubscriptionPlan {
+  id           String    @id @default(uuid())
+  name         String    @unique
+  description  String
+  monthlyPrice Float
+  annualPrice  Float
+  features     String    // JSON array of features
+  isActive     Boolean   @default(true)
+  
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("subscription_plans")
 }
 
 model Location {
   id            String     @id @default(uuid())
   providerId    String
-  provider      Provider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
   name          String
   address1      String
   address2      String?
@@ -58,7 +123,11 @@ model Location {
   latitude      Float?
   longitude     Float?
   isActive      Boolean    @default(true)
+  
+  // Relations
+  provider      Provider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
   procedures    ProcedurePrice[]
+  
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -71,9 +140,12 @@ model ProcedureCategory {
   slug        String      @unique
   description String?
   parentId    String?
+  
+  // Relations
   parent      ProcedureCategory? @relation("CategoryHierarchy", fields: [parentId], references: [id])
   children    ProcedureCategory[] @relation("CategoryHierarchy")
   procedures  ProcedureTemplate[]
+  
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -85,11 +157,14 @@ model ProcedureTemplate {
   name        String
   description String?
   categoryId  String
-  category    ProcedureCategory @relation(fields: [categoryId], references: [id])
   cptCode     String?     // Optional, for future compatibility
   searchTerms String?     // Additional keywords for searching
   isActive    Boolean     @default(true)
+  
+  // Relations
+  category    ProcedureCategory @relation(fields: [categoryId], references: [id])
   prices      ProcedurePrice[]
+  
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -99,12 +174,15 @@ model ProcedureTemplate {
 model ProcedurePrice {
   id            String           @id @default(uuid())
   locationId    String
-  location      Location         @relation(fields: [locationId], references: [id], onDelete: Cascade)
   templateId    String
-  template      ProcedureTemplate @relation(fields: [templateId], references: [id])
   price         Float
   comments      String?
   isActive      Boolean          @default(true)
+  
+  // Relations
+  location      Location         @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  template      ProcedureTemplate @relation(fields: [templateId], references: [id])
+  
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 

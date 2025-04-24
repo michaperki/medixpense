@@ -50,7 +50,7 @@ export default function SearchPage() {
       try {
         setLoadingCategories(true);
         const response = await proceduresApi.getCategories();
-        setCategories(response.data.categories);
+        setCategories(response.categories); // ✅ Correct
       } catch (err) {
         console.error('Error fetching categories:', err);
       } finally {
@@ -86,8 +86,8 @@ export default function SearchPage() {
         // Perform search
         const response = await searchApi.searchProcedures(params);
         
-        setResults(response.data.results);
-        setPagination(response.data.pagination);
+        setResults(response.results);
+        setPagination(response.pagination);
         setError(null);
       } catch (err) {
         console.error('Search error:', err);
@@ -114,7 +114,7 @@ export default function SearchPage() {
     params.set('page', '1');
     
     // Navigate to search page with new parameters
-    router.push(`/search?${params.toString()}`);
+    router.push(`/search/results?${params.toString()}`)
   };
   
   const handlePageChange = (newPage) => {

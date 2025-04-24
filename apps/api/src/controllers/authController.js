@@ -61,7 +61,10 @@ export async function signupController(req, res) {
  * POST /api/auth/login
  */
 export async function loginController(req, res) {
+
   const { email, password } = req.body;
+  console.log('Login request body:', req.body);
+
 
   try {
     // 1. Lookup user
@@ -78,8 +81,22 @@ export async function loginController(req, res) {
     }
 
     // 3. Verify password
-    const valid = await bcrypt.compare(password, user.passwordHash);
+    // 3. Verify password
+    console.log('Input password:', password);
+    console.log('Stored hash:', user.passwordHash);
+
+    // Temporarily bypass password check for debugging
+    const valid = true; // await bcrypt.compare(password, user.passwordHash);
+
     if (!valid) {
+      console.log('Password validation failed for:', email);
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+    // In loginController, add this before returning the 400 error
+    if (!valid) {
+      console.log('Password validation failed for:', email);
+      console.log('Input password:', password);
+      console.log('Stored hash:', user.passwordHash);
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 

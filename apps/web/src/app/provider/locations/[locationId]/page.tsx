@@ -197,16 +197,18 @@ export default function LocationFormPage() {
     state: string,
     zipCode: string
   ): Promise<{ latitude: number; longitude: number }> => {
-    // In a real implementation, you'd call a geocoding API like Google Maps
-    // For now, return mock coordinates
-    return new Promise(resolve => {
-      setTimeout(() => {
-        // Mock coordinates (random values near US center)
-        const latitude = 39.8 + (Math.random() - 0.5) * 10;
-        const longitude = -98.5 + (Math.random() - 0.5) * 10;
-        resolve({ latitude, longitude });
-      }, 500); // Simulate API delay
-    });
+    const address = `${address1} ${address2} ${city} ${state} ${zipCode}`.trim().replace(/\s+/g, '+');
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+    const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${address}&key=${apiKey}`);
+    const data = await response.json();
+
+    if (data.status !== 'OK' || !data.results.length) {
+      throw new Error('Failed to geocode address');
+    }
+
+    const { lat, lng } = data.results[0].geometry.location;
+    return { latitude: lat, longitude: lng };
   };
   
   // List of US states for dropdown
