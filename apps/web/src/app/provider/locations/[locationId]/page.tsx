@@ -1,10 +1,13 @@
-// src/app/provider/locations/[slug]/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { locationsApi } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import { getLogger, LogContext } from '@/lib/logger';
+
+// Create a specialized logger for this component
+const locationLogger = getLogger(LogContext.RENDER);
 
 // Icons
 import { MapPinIcon, BuildingOfficeIcon, PhoneIcon } from '@heroicons/react/24/outline';
@@ -52,14 +55,33 @@ export default function LocationFormPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(isEditMode);
   
+  // Log component initialization
+  useEffect(() => {
+    locationLogger.debug(`LocationFormPage initialized`, { 
+      locationId,
+      isEditMode 
+    });
+    
+    return () => {
+      locationLogger.debug('LocationFormPage unmounted');
+    };
+  }, [locationId, isEditMode]);
+  
   // Fetch location data if in edit mode
   useEffect(() => {
     const fetchLocation = async () => {
       if (locationId) {
+        locationLogger.debug('Fetching location data', { locationId });
+        
         try {
           setIsLoading(true);
           const response = await locationsApi.getById(locationId);
           const location = response.data.location;
+          
+          locationLogger.info('Location data fetched successfully', { 
+            locationId,
+            locationName: location.name 
+          });
           
           // Update form data with location info
           setFormData({
@@ -75,7 +97,11 @@ export default function LocationFormPage() {
             description: location.description || '',
           });
         } catch (error) {
-          console.error('Error fetching location:', error);
+          locationLogger.error('Error fetching location data', { 
+            locationId,
+            error 
+          });
+          
           showToast('Error loading location data', 'error');
           router.push('/provider/locations');
         } finally {
@@ -106,6 +132,8 @@ export default function LocationFormPage() {
   
   // Validate form
   const validateForm = (): boolean => {
+    locationLogger.debug('Validating location form');
+    
     const newErrors: Partial<LocationFormData> = {};
     
     // Required fields
@@ -140,7 +168,18 @@ export default function LocationFormPage() {
     }
     
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    
+    const isValid = Object.keys(newErrors).length === 0;
+    
+    if (!isValid) {
+      locationLogger.warn('Form validation failed', { 
+        errors: Object.keys(newErrors) 
+      });
+    } else {
+      locationLogger.debug('Form validation successful');
+    }
+    
+    return isValid;
   };
   
   // Handle form submission
@@ -153,8 +192,16 @@ export default function LocationFormPage() {
     
     setIsSubmitting(true);
     
+    locationLogger.info('Submitting location form', { 
+      isEditMode, 
+      locationId,
+      locationName: formData.name
+    });
+    
     try {
-      // Call geocoding API to get coordinates (mock implementation)
+      // Call geocoding API to get coordinates
+      locationLogger.debug('Geocoding address');
+      
       const geocodedData = await geocodeAddress(
         formData.address1,
         formData.address2,
@@ -162,6 +209,10 @@ export default function LocationFormPage() {
         formData.state,
         formData.zipCode
       );
+      
+      locationLogger.debug('Geocoding successful', {
+        coordinates: `${geocodedData.latitude},${geocodedData.longitude}`
+      });
       
       // Prepare data for API
       const locationData = {
@@ -172,24 +223,41 @@ export default function LocationFormPage() {
       
       // Create or update location
       if (isEditMode && locationId) {
+        locationLogger.debug('Updating existing location', { locationId });
         await locationsApi.update(locationId, locationData);
+        locationLogger.info('Location updated successfully', { 
+          locationId,
+          locationName: formData.name 
+        });
         showToast('Location updated successfully', 'success');
       } else {
-        await locationsApi.create(locationData);
+        locationLogger.debug('Creating new location');
+        const response = await locationsApi.create(locationData);
+        const newLocationId = response.data?.location?.id;
+        locationLogger.info('Location created successfully', { 
+          locationId: newLocationId,
+          locationName: formData.name 
+        });
         showToast('Location created successfully', 'success');
       }
       
       // Navigate back to locations list
       router.push('/provider/locations');
     } catch (error) {
-      console.error('Error saving location:', error);
+      locationLogger.error('Error saving location', { 
+        isEditMode, 
+        locationId,
+        locationName: formData.name,
+        error
+      });
+      
       showToast('Error saving location', 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
   
-  // Mock function for geocoding (would be replaced with actual API call)
+  // Geocoding function for address to coordinates conversion
   const geocodeAddress = async (
     address1: string,
     address2: string,
@@ -197,18 +265,38 @@ export default function LocationFormPage() {
     state: string,
     zipCode: string
   ): Promise<{ latitude: number; longitude: number }> => {
-    const address = `${address1} ${address2} ${city} ${state} ${zipCode}`.trim().replace(/\s+/g, '+');
+    const addressString = `${address1} ${address2} ${city} ${state} ${zipCode}`.trim();
+    const address = addressString.replace(/\s+/g, '+');
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-    const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${address}&key=${apiKey}`);
-    const data = await response.json();
+    locationLogger.debug('Making geocoding API request', { 
+      addressComponents: { city, state, zipCode } 
+    });
 
-    if (data.status !== 'OK' || !data.results.length) {
-      throw new Error('Failed to geocode address');
+    try {
+      const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${address}&key=${apiKey}`);
+      const data = await response.json();
+
+      if (data.status !== 'OK' || !data.results.length) {
+        locationLogger.warn('Geocoding failed', { 
+          status: data.status, 
+          error: data.error_message 
+        });
+        throw new Error('Failed to geocode address');
+      }
+
+      const { lat, lng } = data.results[0].geometry.location;
+      
+      locationLogger.debug('Geocoding response received', { 
+        status: data.status,
+        resultCount: data.results.length
+      });
+      
+      return { latitude: lat, longitude: lng };
+    } catch (error) {
+      locationLogger.error('Geocoding request failed', { error });
+      throw error;
     }
-
-    const { lat, lng } = data.results[0].geometry.location;
-    return { latitude: lat, longitude: lng };
   };
   
   // List of US states for dropdown
@@ -515,7 +603,10 @@ export default function LocationFormPage() {
           <div className="px-4 py-3 bg-gray-50 text-right sm:px-6">
             <button
               type="button"
-              onClick={() => router.push('/provider/locations')}
+              onClick={() => {
+                locationLogger.debug('Form canceled by user');
+                router.push('/provider/locations');
+              }}
               className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mr-3"
             >
               Cancel

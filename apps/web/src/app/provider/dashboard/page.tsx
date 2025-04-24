@@ -1,15 +1,18 @@
-
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/app/context/AuthContext';
 import { locationsApi, proceduresApi } from '@/lib/api';
+import { getLogger, LogContext } from '@/lib/logger';
 import {
   MapPinIcon,
   ClipboardDocumentListIcon,
   UserGroupIcon,
   CurrencyDollarIcon
 } from '@heroicons/react/24/outline';
+
+// Create a dashboard-specific logger
+const dashboardLogger = getLogger(LogContext.RENDER);
 
 export default function ProviderDashboard() {
   const { user } = useAuth();
@@ -25,42 +28,74 @@ export default function ProviderDashboard() {
 
   useEffect(() => {
     setLoading(true);
+    
     const fetchDashboardData = async () => {
+      dashboardLogger.info('Fetching dashboard data', { 
+        userId: user?.id,
+        providerId: user?.provider?.id
+      });
+      
       try {
-        console.log("User data:", user);  // Add this to check user data
-        console.log("Provider ID:", user?.provider?.id);  // Add this to check provider ID
-        // always load locations
+        // Load locations
+        dashboardLogger.debug('Fetching locations');
         const locResp = await locationsApi.getAll(1, 10);
         const locations = locResp.locations ?? [];
         setRecentLocations(locations.slice(0, 3));
+        
+        dashboardLogger.debug('Locations fetched', { 
+          total: locations.length,
+          displayed: Math.min(locations.length, 3)
+        });
 
-        // only load procedures when we know our provider ID
+        // Only load procedures when we know our provider ID
         let procedures: any[] = [];
         if (user?.provider?.id) {
+          dashboardLogger.debug('Fetching provider procedures', { 
+            providerId: user.provider.id 
+          });
+          
           const procResp = await proceduresApi.getProviderProcedures(
             user.provider.id
           );
           procedures = procResp.procedures ?? [];
+          
+          dashboardLogger.debug('Procedures fetched', { 
+            total: procedures.length 
+          });
+        } else {
+          dashboardLogger.warn('Provider ID not available, skipping procedure fetch');
         }
+        
+        // Sort procedures by price and take top 5
         setTopProcedures(
           procedures.sort((a, b) => b.price - a.price).slice(0, 5)
         );
 
-        // stats
+        // Set stats
         setStats({
           locations: locations.length,
           procedures: procedures.length,
           views: Math.floor(Math.random() * 1000),
           searchImpressions: Math.floor(Math.random() * 5000)
         });
+        
+        dashboardLogger.info('Dashboard data loaded successfully', {
+          locationCount: locations.length,
+          procedureCount: procedures.length
+        });
       } catch (err) {
-        console.error('Error fetching dashboard data:', err);
+        dashboardLogger.error('Error fetching dashboard data', err);
       } finally {
         setLoading(false);
+        dashboardLogger.debug('Dashboard loading complete');
       }
     };
 
-    fetchDashboardData();
+    if (user) {
+      fetchDashboardData();
+    } else {
+      dashboardLogger.debug('No user available, waiting for auth');
+    }
   }, [user]);
 
   if (loading) {

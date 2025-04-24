@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/useToast';
 import { useQuery, useMutation, invalidateQueries } from '@/hooks/useQuery';
 import { locationService, type Location } from '@/services';
+import { getLogger, LogContext } from '@/lib/logger';
 import { 
   PlusIcon, 
   PencilIcon, 
@@ -17,6 +18,9 @@ import {
   ArrowRightIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
+
+// Create a location-specific logger
+const locationsLogger = getLogger(LogContext.RENDER);
 
 export default function LocationsPage() {
   const router = useRouter();
@@ -44,16 +48,27 @@ export default function LocationsPage() {
     if (initialLoadRef.current) return;
     
     const fetchData = async () => {
+      locationsLogger.info('Initial locations data fetch', { page, limit });
+      
       try {
         setIsLoading(true);
-        const result = await locationService.getAll({ page, limit });
+        
+        // Track performance of data loading
+        const result = await locationsLogger.time('Initial locations load', async () => {
+          return locationService.getAll({ page, limit });
+        });
         
         if (result && result.locations) {
+          locationsLogger.debug('Locations data loaded', { 
+            count: result.locations.length,
+            total: result.pagination?.total || 0
+          });
+          
           setLocations(result.locations);
           setPagination(result.pagination || { page, limit, total: 0, pages: 0 });
         }
       } catch (error) {
-        console.error('Error fetching locations:', error);
+        locationsLogger.error('Failed to fetch initial locations data', error);
         showToast(`Error loading locations: ${(error as Error).message}`, 'error');
       } finally {
         setIsLoading(false);
@@ -66,34 +81,57 @@ export default function LocationsPage() {
 
   // Handle page change - fetch new data when page changes
   const handlePageChange = useCallback((newPage: number) => {
+    locationsLogger.debug('Changing page', { 
+      currentPage: page, 
+      newPage, 
+      totalPages: pagination.pages 
+    });
+    
     setIsLoading(true);
     setPage(newPage);
     
-    locationService.getAll({ page: newPage, limit })
-      .then(result => {
+    // Track performance of pagination change
+    locationsLogger.time('Pagination page change', async () => {
+      try {
+        const result = await locationService.getAll({ page: newPage, limit });
+        
         if (result && result.locations) {
+          locationsLogger.debug('Page data loaded', { 
+            page: newPage,
+            count: result.locations.length
+          });
+          
           setLocations(result.locations);
           setPagination(result.pagination || { page: newPage, limit, total: 0, pages: 0 });
         }
-      })
-      .catch(error => {
-        console.error('Error fetching locations:', error);
-        showToast(`Error: ${error.message}`, 'error');
-      })
-      .finally(() => {
+      } catch (error) {
+        locationsLogger.error('Failed to change page', { newPage, error });
+        showToast(`Error: ${(error as Error).message}`, 'error');
+      } finally {
         setIsLoading(false);
-      });
-  }, [limit, showToast]);
+      }
+    });
+  }, [page, limit, pagination.pages, showToast]);
 
   // Delete location
   const handleDeleteLocation = async (id: string) => {
+    locationsLogger.info('Deleting location', { id });
+    
     try {
       setIsLoading(true);
-      await locationService.delete(id);
+      
+      // Track performance of deletion
+      await locationsLogger.time('Location deletion', async () => {
+        await locationService.delete(id);
+      });
+      
+      locationsLogger.info('Location deleted successfully', { id });
       showToast('Location deleted successfully', 'success');
       
       // Refresh data
+      locationsLogger.debug('Refreshing locations after deletion');
       const result = await locationService.getAll({ page, limit });
+      
       if (result && result.locations) {
         setLocations(result.locations);
         setPagination(result.pagination || { page, limit, total: 0, pages: 0 });
@@ -102,7 +140,7 @@ export default function LocationsPage() {
       setDeleteModalOpen(false);
       setLocationToDelete(null);
     } catch (error) {
-      console.error('Error deleting location:', error);
+      locationsLogger.error('Failed to delete location', { id, error });
       showToast(`Error: ${(error as Error).message}`, 'error');
     } finally {
       setIsLoading(false);
@@ -111,21 +149,47 @@ export default function LocationsPage() {
 
   // Handle delete click
   const handleDeleteClick = useCallback((location: Location) => {
+    locationsLogger.debug('Delete location initiated', { 
+      id: location.id,
+      name: location.name
+    });
+    
     setLocationToDelete(location);
     setDeleteModalOpen(true);
   }, []);
   
   // Handle confirm delete
   const handleConfirmDelete = useCallback(() => {
-    if (!locationToDelete) return;
+    if (!locationToDelete) {
+      locationsLogger.warn('Attempted to confirm delete with no location selected');
+      return;
+    }
+    
+    locationsLogger.debug('Delete confirmed', { id: locationToDelete.id });
     handleDeleteLocation(locationToDelete.id);
   }, [locationToDelete]);
   
   // Handle cancel delete
   const handleCancelDelete = useCallback(() => {
+    locationsLogger.debug('Delete cancelled', { 
+      id: locationToDelete?.id
+    });
+    
     setLocationToDelete(null);
     setDeleteModalOpen(false);
-  }, []);
+  }, [locationToDelete]);
+  
+  // Log when component renders with data
+  useEffect(() => {
+    if (!isLoading && locations.length > 0) {
+      locationsLogger.debug('Rendering locations list', {
+        locationCount: locations.length,
+        currentPage: page,
+        totalPages: pagination.pages,
+        totalItems: pagination.total
+      });
+    }
+  }, [isLoading, locations, page, pagination]);
   
   return (
     <div className="space-y-6">

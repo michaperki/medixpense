@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { proceduresApi } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import { getLogger, LogContext } from '@/lib/logger';
 import { 
   ArrowLeftIcon,
   CurrencyDollarIcon,
@@ -11,6 +12,9 @@ import {
   InformationCircleIcon,
   MapPinIcon
 } from '@heroicons/react/24/outline';
+
+// Create a procedure-specific logger for this page
+const editProcedureLogger = getLogger(LogContext.RENDER);
 
 type Procedure = {
   id: string;
@@ -59,25 +63,39 @@ export default function EditProcedurePage() {
   // Fetch procedure data on component mount
   useEffect(() => {
     const fetchProcedure = async () => {
+      editProcedureLogger.info('Fetching procedure details', { procedureId });
+      
       try {
         setLoading(true);
         
-        // Fetch procedure details
-        const response = await proceduresApi.getProcedureById(procedureId);
+        // Fetch procedure details with performance tracking
+        const response = await editProcedureLogger.time('Fetch procedure details', async () => {
+          return proceduresApi.getProcedureById(procedureId);
+        });
+        
         const procedureData = response.procedurePrice;
         
         if (!procedureData) {
+          editProcedureLogger.warn('Procedure not found', { procedureId });
           throw new Error('Procedure not found');
         }
+        
+        editProcedureLogger.debug('Procedure data loaded', { 
+          procedureId: procedureData.id,
+          templateName: procedureData.template?.name,
+          locationName: procedureData.location?.name,
+          currentPrice: procedureData.price
+        });
         
         setProcedure(procedureData);
         setPrice(procedureData.price);
         
+        // Fetch price statistics after fetching procedure
         fetchPriceStats(procedureData);
         
         setError(null);
       } catch (err) {
-        console.error('Error fetching procedure:', err);
+        editProcedureLogger.error('Failed to fetch procedure', { procedureId, error: err });
         setError('Failed to load procedure. Please try again later.');
       } finally {
         setLoading(false);
@@ -89,27 +107,45 @@ export default function EditProcedurePage() {
   
   // Fetch price statistics 
   const fetchPriceStats = async (procData: Procedure) => {
+    editProcedureLogger.debug('Fetching price statistics', {
+      templateId: procData.template.id,
+      locationId: procData.location.id
+    });
+    
     try {
       setStatsLoading(true);
       
-      // In a real implementation, this would call an API to get stats for this procedure type in the area
-      const response = await proceduresApi.getPriceStats(procData.template.id, {
-        locationId: procData.location.id, // To exclude current location from stats
-        radius: 50, // Miles
+      // Track performance of statistics fetch
+      const response = await editProcedureLogger.time('Fetch price statistics', async () => {
+        return proceduresApi.getPriceStats(procData.template.id, {
+          locationId: procData.location.id, // To exclude current location from stats
+          radius: 50, // Miles
+        });
       });
       
       // Handle the response based on the API structure
       const statsData = response.stats;
       
       if (statsData) {
+        editProcedureLogger.debug('Price statistics loaded', {
+          min: statsData.min,
+          max: statsData.max,
+          average: statsData.average,
+          median: statsData.median
+        });
+        
         setPriceStats(statsData);
       } else {
+        editProcedureLogger.debug('No price statistics available for this procedure');
         // If no stats available, set to null
         setPriceStats(null);
       }
       
     } catch (err) {
-      console.error('Error fetching price statistics:', err);
+      editProcedureLogger.warn('Failed to fetch price statistics', { 
+        templateId: procData.template.id,
+        error: err
+      });
       // If stats API fails, don't show an error to the user, just don't show stats
       setPriceStats(null);
     } finally {
@@ -120,14 +156,28 @@ export default function EditProcedurePage() {
   // Handle price change
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseFloat(e.target.value);
-    setPrice(isNaN(value) ? 0 : value);
+    const newPrice = isNaN(value) ? 0 : value;
+    
+    editProcedureLogger.debug('Price input changed', { 
+      oldPrice: price,
+      newPrice: newPrice
+    });
+    
+    setPrice(newPrice);
   };
   
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    editProcedureLogger.info('Procedure price update submitted', { 
+      procedureId,
+      newPrice: price,
+      oldPrice: procedure?.price
+    });
+    
     if (price <= 0) {
+      editProcedureLogger.warn('Invalid price submitted', { price });
       showToast('Please enter a valid price', 'error');
       return;
     }
@@ -135,8 +185,16 @@ export default function EditProcedurePage() {
     try {
       setIsSubmitting(true);
       
-      // Update the procedure price
-      await proceduresApi.updatePrice(procedureId, { price });
+      // Track performance of price update
+      await editProcedureLogger.time('Update procedure price', async () => {
+        return proceduresApi.updatePrice(procedureId, { price });
+      });
+      
+      editProcedureLogger.info('Procedure price updated successfully', {
+        procedureId,
+        newPrice: price,
+        priceDifference: price - (procedure?.price || 0)
+      });
       
       showToast('Procedure price updated successfully', 'success');
       
@@ -144,13 +202,31 @@ export default function EditProcedurePage() {
       router.push(`/provider/procedures`);
       
     } catch (err: any) {
-      console.error('Error updating procedure price:', err);
+      editProcedureLogger.error('Failed to update procedure price', {
+        procedureId,
+        price,
+        error: err
+      });
+      
       const errorMessage = err.message || 'Failed to update procedure price';
       showToast(errorMessage, 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
+  
+  // Log component render state
+  useEffect(() => {
+    if (!loading) {
+      editProcedureLogger.debug('Edit procedure page render state', {
+        procedureId,
+        hasData: !!procedure,
+        hasError: !!error,
+        priceStatsAvailable: !!priceStats,
+        isSubmitting
+      });
+    }
+  }, [loading, procedure, error, priceStats, isSubmitting, procedureId]);
   
   if (loading) {
     return (
@@ -319,7 +395,10 @@ export default function EditProcedurePage() {
           <div className="px-4 py-3 bg-gray-50 text-right sm:px-6">
             <button
               type="button"
-              onClick={() => router.back()}
+              onClick={() => {
+                editProcedureLogger.debug('Edit canceled, returning to previous page');
+                router.back();
+              }}
               className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mr-3"
             >
               Cancel

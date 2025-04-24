@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
+import { getLogger, LogContext } from '@/lib/logger';
 import {
   UserIcon,
   MapPinIcon,
@@ -13,6 +14,9 @@ import {
   ArrowRightOnRectangleIcon
 } from '@heroicons/react/24/outline';
 
+// Create a layout-specific logger
+const layoutLogger = getLogger(LogContext.RENDER);
+
 export default function ProviderLayout({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated, loading, logout } = useAuth();
   const router = useRouter();
@@ -20,12 +24,33 @@ export default function ProviderLayout({ children }: { children: React.ReactNode
 
   // Redirect if not authenticated
   useEffect(() => {
+    layoutLogger.debug('Checking authentication status', { 
+      isAuthenticated, 
+      loading,
+      pathname
+    });
+
     if (!loading && !isAuthenticated) {
+      layoutLogger.info('User not authenticated, redirecting to login', {
+        redirectTarget: '/provider/dashboard'
+      });
       router.push('/login?redirect=/provider/dashboard');
+    } else if (!loading && isAuthenticated) {
+      layoutLogger.debug('User authenticated', { 
+        userId: user?.id,
+        role: user?.role
+      });
     }
-  }, [isAuthenticated, loading, router]);
+  }, [isAuthenticated, loading, router, pathname, user]);
+
+  // Handle logout action
+  const handleLogout = () => {
+    layoutLogger.info('User initiated logout');
+    logout();
+  };
 
   if (loading) {
+    layoutLogger.debug('Provider layout in loading state');
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
@@ -45,6 +70,11 @@ export default function ProviderLayout({ children }: { children: React.ReactNode
       ? `${baseClasses} bg-blue-700 text-white font-medium` 
       : `${baseClasses} text-blue-100 hover:bg-blue-700`;
   };
+
+  layoutLogger.debug('Rendering provider layout', { 
+    pathname,
+    userHasProvider: !!user?.provider
+  });
 
   return (
     <div className="min-h-screen flex">
@@ -83,7 +113,7 @@ export default function ProviderLayout({ children }: { children: React.ReactNode
             <span className="ml-3">Settings</span>
           </Link>
           <button 
-            onClick={logout}
+            onClick={handleLogout}
             className="w-full flex items-center px-6 py-3 text-blue-100 hover:bg-blue-700"
           >
             <ArrowRightOnRectangleIcon className="h-5 w-5" />

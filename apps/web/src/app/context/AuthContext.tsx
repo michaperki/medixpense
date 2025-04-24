@@ -10,6 +10,7 @@ import {
 import { useRouter } from "next/navigation";
 import apiClient, { ApiError } from "@/lib/apiClient";
 import axios from "axios";
+import { authLogger } from "@/lib/logger";
 import type {
   User,
   LoginRequest,
@@ -71,35 +72,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Hydrate from localStorage
   useEffect(() => {
-    const storedToken = localStorage.getItem("authToken");
-    const u = localStorage.getItem("user");
-    
-    if (storedToken && u) {
-      setToken(storedToken);
+    const checkAuth = async () => {
+      const storedToken = localStorage.getItem("authToken");
+      const u = localStorage.getItem("user");
       
-      // Set the authorization header for apiClient
-      if (apiClient.client?.defaults?.headers) {
-        apiClient.client.defaults.headers.common["Authorization"] =
-          "Bearer " + storedToken;
-      }
-      
-      const userData = JSON.parse(u);
-      setUser(userData);
+      if (storedToken && u) {
+        authLogger.debug("Restoring session from localStorage");
+        setToken(storedToken);
+        
+        // Set the authorization header for apiClient
+        if (apiClient.client?.defaults?.headers) {
+          apiClient.client.defaults.headers.common["Authorization"] =
+            "Bearer " + storedToken;
+          authLogger.debug("Set authorization header for client");
+        }
+        
+        try {
+          const userData = JSON.parse(u);
+          setUser(userData);
+          authLogger.info("User session restored", { userId: userData.id, role: userData.role });
 
-      // Check if user is a provider but doesn't have provider data
-      if (userData.role === 'PROVIDER' && !userData.provider) {
-        // Fetch provider data
-        fetchProviderData(userData.id);
+          // Check if user is a provider but doesn't have provider data
+          if (userData.role === 'PROVIDER' && !userData.provider) {
+            // Fetch provider data
+            fetchProviderData(userData.id);
+          }
+        } catch (parseError) {
+          authLogger.error("Failed to parse user data from localStorage", parseError);
+          // Clear invalid data
+          localStorage.removeItem("authToken");
+          localStorage.removeItem("user");
+        }
+      } else {
+        authLogger.debug("No stored auth session found");
       }
-    }
-    setLoading(false);
+      setLoading(false);
+    };
+    
+    checkAuth();
   }, []);
 
   // Function to fetch provider data
   const fetchProviderData = async (userId: string) => {
     try {
-      console.log(`Fetching provider data for user ${userId}`);
-      console.log('API Base URL for provider fetch:', API_BASE_URL);
+      authLogger.debug(`Fetching provider data`, { userId });
       
       // Use direct axios to ensure the right URL
       const response = await axios.get(`${API_BASE_URL}/providers/user/${userId}`, {
@@ -108,16 +124,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       });
       
-      console.log('Provider data response:', response.data);
-      
       if (response.data) {
+        authLogger.info("Provider data fetched successfully", { providerId: response.data.id });
+        
         // Update user with provider data
         const updatedUser = { ...user, provider: response.data };
         setUser(updatedUser);
         localStorage.setItem("user", JSON.stringify(updatedUser));
       }
     } catch (err) {
-      console.error("Error fetching provider data:", err);
+      authLogger.error("Error fetching provider data", err);
       // Don't set an error - this is a background fetch
     }
   };
@@ -128,18 +144,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     setLoading(true);
     
-    console.log('Login credentials before API call:', { email, password });
+    authLogger.debug("Login attempt initiated", { email });
 
     // Validate inputs before making the API call
     if (!email || !password) {
-      setError("Email and password are required");
+      const errorMsg = "Email and password are required";
+      setError(errorMsg);
       setLoading(false);
-      throw new Error("Email and password are required");
+      authLogger.warn("Login validation failed", { reason: errorMsg });
+      throw new Error(errorMsg);
     }
     
     try {
-      console.log('Attempting login with credentials:', { email });
-      console.log('Full API URL for login:', `${API_BASE_URL}/auth/login`);
+      authLogger.debug("Making login API call");
       
       // Use direct axios call to ensure correct URL with /api prefix
       const response = await axios.post(`${API_BASE_URL}/auth/login`, { 
@@ -150,8 +167,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           'Content-Type': 'application/json'
         }
       });
-      
-      console.log('Login response:', response.data);
       
       const responseData = response.data;
       
@@ -169,8 +184,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         apiClient.client.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
       }
       
+      authLogger.info("Login successful", { userId: user.id, role: user.role });
+      
       // If user is a provider, fetch provider data
       if (user.role === 'PROVIDER') {
+        authLogger.debug("User is a provider, fetching provider data");
         try {
           const providerResponse = await axios.get(`${API_BASE_URL}/providers/user/${user.id}`, {
             headers: {
@@ -181,9 +199,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (providerResponse.data) {
             // Add provider data to user
             user.provider = providerResponse.data;
+            authLogger.debug("Provider data fetched successfully", { providerId: providerResponse.data.id });
           }
         } catch (providerErr) {
-          console.error("Error fetching provider data:", providerErr);
+          authLogger.warn("Error fetching provider data during login", providerErr);
           // Continue with login even if provider fetch fails
         }
       }
@@ -194,12 +213,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       return user;
     } catch (err: any) {
-      console.error("Login Error:", err);
+      authLogger.error("Login failed", err);
       
       // Better error handling for axios errors
       let errorMessage = "Login failed";
       if (err.response) {
-        console.error("Error response:", err.response.data);
         errorMessage = err.response.data?.message || 'Server error';
       } else if (err.request) {
         errorMessage = 'No response from server';
@@ -215,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    authLogger.info("User logout", { userId: user?.id });
     setUser(null);
     setToken(null);
     localStorage.removeItem("authToken");
@@ -229,16 +248,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     setLoading(true);
     
+    authLogger.debug("Registration attempt", { email: data.email, role: data.role });
+    
     // Validate inputs
     if (!data.email || !data.password || !data.firstName || !data.lastName) {
-      setError("All required fields must be filled");
+      const errorMsg = "All required fields must be filled";
+      setError(errorMsg);
       setLoading(false);
-      throw new Error("All required fields must be filled");
+      authLogger.warn("Registration validation failed", { reason: errorMsg });
+      throw new Error(errorMsg);
     }
     
     try {
-      console.log('Full API URL for register:', `${API_BASE_URL}/auth/register`);
-      
       // Use direct axios for consistent URL handling
       const response = await axios.post(`${API_BASE_URL}/auth/register`, data, {
         headers: {
@@ -262,8 +283,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         apiClient.client.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
       }
       
+      authLogger.info("Registration successful", { userId: user.id, role: user.role });
+      
       // If user is a provider, fetch provider data
       if (user.role === 'PROVIDER') {
+        authLogger.debug("New user is a provider, fetching provider data");
         try {
           const providerResponse = await axios.get(`${API_BASE_URL}/providers/user/${user.id}`, {
             headers: {
@@ -274,9 +298,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (providerResponse.data) {
             // Add provider data to user
             user.provider = providerResponse.data;
+            authLogger.debug("Provider data fetched for new user", { providerId: providerResponse.data.id });
           }
         } catch (providerErr) {
-          console.error("Error fetching provider data during registration:", providerErr);
+          authLogger.warn("Error fetching provider data during registration", providerErr);
           // Continue with registration even if provider fetch fails
         }
       }
@@ -287,7 +312,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       return user;
     } catch (err: any) {
-      console.error("Registration Error:", err);
+      authLogger.error("Registration failed", err);
       
       let errorMessage = "Registration failed";
       if (err.response) {
@@ -308,10 +333,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const forgotPassword = async (email: string) => {
     setError(null);
     setLoading(true);
+    
+    authLogger.debug("Password reset request initiated", { email });
+    
     try {
       await axios.post(`${API_BASE_URL}/auth/forgot-password`, { email });
+      authLogger.info("Password reset email sent", { email });
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || "Failed to send reset email";
+      authLogger.error("Password reset request failed", { email, error: errorMessage });
       setError(errorMessage);
       throw err;
     } finally {
@@ -322,10 +352,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resetPassword = async (resetToken: string, password: string) => {
     setError(null);
     setLoading(true);
+    
+    authLogger.debug("Password reset attempt with token");
+    
     try {
       await axios.post(`${API_BASE_URL}/auth/reset-password`, { token: resetToken, password });
+      authLogger.info("Password reset successful");
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || "Reset failed";
+      authLogger.error("Password reset failed", { error: errorMessage });
       setError(errorMessage);
       throw err;
     } finally {
@@ -336,14 +371,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const changePassword = async (data: ChangePasswordRequest) => {
     setError(null);
     setLoading(true);
+    
+    authLogger.debug("Password change attempt", { userId: user?.id });
+    
     try {
       await axios.post(`${API_BASE_URL}/auth/change-password`, data, {
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
+      authLogger.info("Password changed successfully", { userId: user?.id });
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || "Change password failed";
+      authLogger.error("Password change failed", { userId: user?.id, error: errorMessage });
       setError(errorMessage);
       throw err;
     } finally {
@@ -354,6 +394,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateProfile = async (data: UpdateProfileRequest) => {
     setError(null);
     setLoading(true);
+    
+    authLogger.debug("Profile update attempt", { userId: user?.id });
+    
     try {
       const response = await axios.put(`${API_BASE_URL}/auth/profile`, data, {
         headers: {
@@ -371,9 +414,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       setUser(updated);
       localStorage.setItem("user", JSON.stringify(updated));
+      
+      authLogger.info("Profile updated successfully", { userId: updated.id });
       return updated;
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || "Profile update failed";
+      authLogger.error("Profile update failed", { userId: user?.id, error: errorMessage });
       setError(errorMessage);
       throw err;
     } finally {
@@ -384,6 +430,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const uploadProfileImage = async (file: File) => {
     setError(null);
     setLoading(true);
+    
+    authLogger.debug("Profile image upload attempt", { userId: user?.id, fileSize: file.size });
+    
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -401,10 +450,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const u2 = { ...user, profileImageUrl };
         setUser(u2);
         localStorage.setItem("user", JSON.stringify(u2));
+        authLogger.info("Profile image uploaded successfully", { userId: user.id });
       }
       return profileImageUrl;
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || "Upload failed";
+      authLogger.error("Profile image upload failed", { userId: user?.id, error: errorMessage });
       setError(errorMessage);
       throw err;
     } finally {

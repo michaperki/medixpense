@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { locationsApi, proceduresApi } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import { getLogger, LogContext } from '@/lib/logger';
 import { 
   PlusIcon, 
   PencilIcon, 
@@ -16,6 +17,9 @@ import {
   ArrowDownIcon,
   MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
+
+// Create a location-procedures specific logger
+const locationProceduresLogger = getLogger(LogContext.RENDER);
 
 type Procedure = {
   id: string;
@@ -66,30 +70,58 @@ export default function ProceduresPage() {
   const [selectedProcedures, setSelectedProcedures] = useState<string[]>([]);
   const [bulkAdjustmentPercent, setBulkAdjustmentPercent] = useState<number>(0);
   
+  // Log component initialization
+  useEffect(() => {
+    locationProceduresLogger.info('Location procedures page initialized', {
+      locationId,
+      path: window.location.pathname
+    });
+    
+    return () => {
+      locationProceduresLogger.debug('Location procedures page unmounted');
+    };
+  }, [locationId]);
+  
   // Fetch data on component mount
   useEffect(() => {
+    locationProceduresLogger.debug('Location ID changed, fetching data', { locationId });
     fetchLocationAndProcedures();
   }, [locationId]);
   
   const fetchLocationAndProcedures = async () => {
+    locationProceduresLogger.info('Fetching location and procedures data', { locationId });
+    
     try {
       setLoading(true);
       
-      // Fetch location details - handle response structure correctly
-      const locationResponse = await locationsApi.getById(locationId);
+      // Fetch location details with performance tracking
+      const locationResponse = await locationProceduresLogger.time('Fetch location details', async () => {
+        return locationsApi.getById(locationId);
+      });
       
       // Handle both possible response structures
       const locationData = locationResponse.location || locationResponse;
       
       if (!locationData) {
-        throw new Error('Location data not found');
+        const errorMsg = 'Location data not found';
+        locationProceduresLogger.warn('Location data not found', { locationId });
+        throw new Error(errorMsg);
       }
+      
+      locationProceduresLogger.debug('Location data fetched', { 
+        locationName: locationData.name,
+        locationCity: locationData.city,
+        locationState: locationData.state
+      });
       
       setLocation(locationData);
       
       // Try to fetch procedures, but don't let it break the page if it fails
       try {
-        const proceduresResponse = await proceduresApi.getProviderProcedures({ locationId });
+        // Track procedure fetch performance
+        const proceduresResponse = await locationProceduresLogger.time('Fetch location procedures', async () => {
+          return proceduresApi.getProviderProcedures({ locationId });
+        });
         
         // Handle different response structures for procedures
         const proceduresData = 
@@ -97,10 +129,19 @@ export default function ProceduresPage() {
           (proceduresResponse?.data ? proceduresResponse.data.procedures : []) ||
           [];
         
+        locationProceduresLogger.debug('Procedures data fetched', {
+          count: proceduresData.length,
+          hasProcedures: proceduresData.length > 0,
+          responseFormat: proceduresResponse?.procedures ? 'direct' : 
+                         (proceduresResponse?.data ? 'nested' : 'unknown')
+        });
+        
         setProcedures(proceduresData);
         
         // Only extract categories if we have procedure data
         if (proceduresData.length > 0) {
+          locationProceduresLogger.debug('Extracting unique categories');
+          
           const uniqueCategories = [...new Set(
             proceduresData
               .filter(p => p.template && p.template.category)
@@ -108,10 +149,16 @@ export default function ProceduresPage() {
               .map(category => JSON.stringify(category))
           )].map(str => JSON.parse(str));
           
+          locationProceduresLogger.debug('Categories extracted', { 
+            categoryCount: uniqueCategories.length 
+          });
+          
           setCategories(uniqueCategories);
+        } else {
+          locationProceduresLogger.debug('No procedures found for location');
         }
       } catch (procedureErr) {
-        console.error('Error fetching procedures:', procedureErr);
+        locationProceduresLogger.error('Failed to fetch procedures', procedureErr);
         // We don't set the main error state here, as we still want to show the location
         // Just set empty procedures
         setProcedures([]);
@@ -119,24 +166,58 @@ export default function ProceduresPage() {
       
       setError(null);
     } catch (err) {
-      console.error('Error fetching data:', err);
+      locationProceduresLogger.error('Failed to fetch location data', err);
       setError('Failed to load location data. Please try again later.');
     } finally {
       setLoading(false);
+      locationProceduresLogger.debug('Data fetching completed', { 
+        hasLocation: !!location,
+        procedureCount: procedures.length,
+        hasError: !!error
+      });
     }
   };
   
   // Handle sorting
   const handleSort = (field: SortField) => {
+    locationProceduresLogger.debug('Sorting procedures', { 
+      currentField: sortField, 
+      newField: field, 
+      currentDirection: sortDirection 
+    });
+    
     if (field === sortField) {
       // Toggle direction if clicking the same field
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      const newDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      setSortDirection(newDirection);
+      
+      locationProceduresLogger.debug('Changed sort direction', { 
+        field, 
+        newDirection 
+      });
     } else {
       // Default to ascending for new sort field
       setSortField(field);
       setSortDirection('asc');
+      
+      locationProceduresLogger.debug('Changed sort field', { 
+        oldField: sortField, 
+        newField: field 
+      });
     }
   };
+  
+  // Log when filter criteria change
+  useEffect(() => {
+    if (!loading) {
+      locationProceduresLogger.debug('Filter/sort criteria updated', {
+        searchTerm: searchTerm || '(none)',
+        category: selectedCategory || '(all)',
+        sortField,
+        sortDirection
+      });
+    }
+  }, [searchTerm, selectedCategory, sortField, sortDirection, loading]);
   
   // Get sorted and filtered procedures
   const filteredAndSortedProcedures = procedures
@@ -165,26 +246,62 @@ export default function ProceduresPage() {
       return 0;
     });
   
+  // Log any filtering results
+  useEffect(() => {
+    if (!loading && procedures.length > 0) {
+      locationProceduresLogger.debug('Filtered procedures result', {
+        totalProcedures: procedures.length,
+        filteredCount: filteredAndSortedProcedures.length,
+        isFiltered: filteredAndSortedProcedures.length !== procedures.length
+      });
+    }
+  }, [filteredAndSortedProcedures.length, procedures.length, loading]);
+  
   // Handle procedure deletion
   const handleDeleteClick = (procedure: Procedure) => {
+    locationProceduresLogger.debug('Delete procedure dialog opened', { 
+      procedureId: procedure.id,
+      procedureName: procedure.template?.name
+    });
+    
     setProcedureToDelete(procedure);
     setDeleteModalOpen(true);
   };
   
   const handleCancelDelete = () => {
+    locationProceduresLogger.debug('Delete procedure canceled', {
+      procedureId: procedureToDelete?.id
+    });
+    
     setProcedureToDelete(null);
     setDeleteModalOpen(false);
   };
   
   const handleConfirmDelete = async () => {
-    if (!procedureToDelete) return;
+    if (!procedureToDelete) {
+      locationProceduresLogger.warn('Attempted to confirm delete with no procedure selected');
+      return;
+    }
+    
+    locationProceduresLogger.info('Deleting procedure', { 
+      id: procedureToDelete.id,
+      name: procedureToDelete.template?.name
+    });
     
     try {
       setIsDeleting(true);
-      await proceduresApi.deletePrice(procedureToDelete.id);
+      
+      // Track performance of deletion
+      await locationProceduresLogger.time('Delete procedure', async () => {
+        await proceduresApi.deletePrice(procedureToDelete.id);
+      });
       
       // Update state
       setProcedures(prev => prev.filter(proc => proc.id !== procedureToDelete.id));
+      
+      locationProceduresLogger.info('Procedure deleted successfully', {
+        id: procedureToDelete.id
+      });
       
       // Show success message
       showToast('Procedure deleted successfully', 'success');
@@ -193,7 +310,11 @@ export default function ProceduresPage() {
       setDeleteModalOpen(false);
       setProcedureToDelete(null);
     } catch (err) {
-      console.error('Error deleting procedure:', err);
+      locationProceduresLogger.error('Failed to delete procedure', {
+        id: procedureToDelete.id,
+        error: err
+      });
+      
       showToast('Failed to delete procedure', 'error');
     } finally {
       setIsDeleting(false);
@@ -202,6 +323,11 @@ export default function ProceduresPage() {
   
   // Handle bulk selection
   const handleSelectProcedure = (procedureId: string) => {
+    locationProceduresLogger.debug('Toggle procedure selection', { 
+      procedureId, 
+      wasSelected: selectedProcedures.includes(procedureId) 
+    });
+    
     setSelectedProcedures(prev => {
       if (prev.includes(procedureId)) {
         return prev.filter(id => id !== procedureId);
@@ -212,7 +338,16 @@ export default function ProceduresPage() {
   };
   
   const handleSelectAll = () => {
-    if (selectedProcedures.length === filteredAndSortedProcedures.length) {
+    const allSelected = selectedProcedures.length === filteredAndSortedProcedures.length;
+    
+    locationProceduresLogger.debug('Toggle select all procedures', { 
+      currentlySelected: selectedProcedures.length,
+      total: filteredAndSortedProcedures.length,
+      allSelected,
+      action: allSelected ? 'deselect-all' : 'select-all'
+    });
+    
+    if (allSelected) {
       // Deselect all
       setSelectedProcedures([]);
     } else {
@@ -224,32 +359,72 @@ export default function ProceduresPage() {
   // Handle bulk price adjustment
   const handleBulkPriceAdjustment = async () => {
     if (selectedProcedures.length === 0 || bulkAdjustmentPercent === 0) {
+      locationProceduresLogger.warn('Attempted bulk price adjustment with invalid parameters', {
+        selectedCount: selectedProcedures.length,
+        adjustmentPercent: bulkAdjustmentPercent
+      });
       return;
     }
     
+    locationProceduresLogger.info('Starting bulk price adjustment', {
+      selectedCount: selectedProcedures.length,
+      adjustmentPercent: bulkAdjustmentPercent
+    });
+    
     try {
-      // Here we'd normally make an API call to update all prices at once
-      // For this example, we'll simulate it by updating each procedure individually
+      // Log the start of the bulk operation
+      locationProceduresLogger.group('Bulk price adjustment', () => {
+        locationProceduresLogger.debug('Selected procedures', {
+          ids: selectedProcedures,
+          count: selectedProcedures.length
+        });
+        
+        locationProceduresLogger.debug('Adjustment details', {
+          percent: bulkAdjustmentPercent,
+          factor: 1 + (bulkAdjustmentPercent / 100)
+        });
+      });
       
-      const updatedProcedures = [...procedures];
-      
-      for (const procedureId of selectedProcedures) {
-        const procedure = updatedProcedures.find(p => p.id === procedureId);
-        if (procedure) {
-          const adjustmentFactor = 1 + (bulkAdjustmentPercent / 100);
-          const newPrice = procedure.price * adjustmentFactor;
-          
-          // Update in the backend (in a real implementation)
-          await proceduresApi.updatePrice(procedureId, { 
-            price: newPrice
-          });
-          
-          // Update in local state
-          procedure.price = newPrice;
+      // Track performance of the bulk operation
+      await locationProceduresLogger.time('Bulk price adjustment', async () => {
+        // Here we'd normally make an API call to update all prices at once
+        // For this example, we'll simulate it by updating each procedure individually
+        
+        const updatedProcedures = [...procedures];
+        
+        for (const procedureId of selectedProcedures) {
+          const procedure = updatedProcedures.find(p => p.id === procedureId);
+          if (procedure) {
+            const adjustmentFactor = 1 + (bulkAdjustmentPercent / 100);
+            const oldPrice = procedure.price;
+            const newPrice = procedure.price * adjustmentFactor;
+            
+            // Log individual price updates
+            locationProceduresLogger.debug('Updating procedure price', {
+              procedureId,
+              procedureName: procedure.template.name,
+              oldPrice,
+              newPrice,
+              difference: newPrice - oldPrice
+            });
+            
+            // Update in the backend (in a real implementation)
+            await proceduresApi.updatePrice(procedureId, { 
+              price: newPrice
+            });
+            
+            // Update in local state
+            procedure.price = newPrice;
+          }
         }
-      }
+        
+        return updatedProcedures;
+      });
       
-      setProcedures(updatedProcedures);
+      locationProceduresLogger.info('Bulk price adjustment completed', {
+        updatedCount: selectedProcedures.length
+      });
+      
       showToast(`Updated prices for ${selectedProcedures.length} procedures`, 'success');
       
       // Reset selections
@@ -257,10 +432,36 @@ export default function ProceduresPage() {
       setBulkAdjustmentPercent(0);
       setBulkEditMode(false);
     } catch (err) {
-      console.error('Error updating prices:', err);
+      locationProceduresLogger.error('Failed to update prices in bulk', err);
       showToast('Failed to update prices', 'error');
     }
   };
+  
+  // Log component rendering state
+  useEffect(() => {
+    if (!loading) {
+      locationProceduresLogger.debug('Location procedures page render state', {
+        isLoading: loading,
+        hasError: !!error,
+        hasLocation: !!location,
+        locationName: location?.name,
+        procedureCount: procedures.length,
+        filteredCount: filteredAndSortedProcedures.length,
+        categoryCount: categories.length,
+        bulkEditMode,
+        selectedProceduresCount: selectedProcedures.length
+      });
+    }
+  }, [
+    loading, 
+    error, 
+    location, 
+    procedures.length, 
+    filteredAndSortedProcedures.length, 
+    categories.length,
+    bulkEditMode,
+    selectedProcedures.length
+  ]);
   
   if (loading) {
     return (
@@ -307,6 +508,7 @@ export default function ProceduresPage() {
               </button>
               <button
                 onClick={() => {
+                  locationProceduresLogger.debug('Exiting bulk edit mode');
                   setBulkEditMode(false);
                   setSelectedProcedures([]);
                 }}
@@ -318,7 +520,10 @@ export default function ProceduresPage() {
           ) : (
             <>
               <button
-                onClick={() => setBulkEditMode(true)}
+                onClick={() => {
+                  locationProceduresLogger.debug('Entering bulk edit mode');
+                  setBulkEditMode(true);
+                }}
                 className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
                 Bulk Price Update
@@ -326,6 +531,7 @@ export default function ProceduresPage() {
               <Link
                 href={`/provider/locations/${locationId}/add-procedure`}
                 className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                onClick={() => locationProceduresLogger.info('Navigating to add procedure page', { locationId })}
               >
                 <PlusIcon className="-ml-1 mr-2 h-5 w-5" />
                 Add Procedure
@@ -403,6 +609,7 @@ export default function ProceduresPage() {
             <Link
               href={`/provider/locations/${locationId}/add-procedure`}
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              onClick={() => locationProceduresLogger.info('Navigating to add procedure from empty state', { locationId })}
             >
               <PlusIcon className="-ml-1 mr-2 h-5 w-5" />
               Add Procedure
@@ -518,6 +725,10 @@ export default function ProceduresPage() {
                               <Link
                                 href={`/provider/procedures/${procedure.id}/edit`}
                                 className="text-blue-600 hover:text-blue-900"
+                                onClick={() => locationProceduresLogger.debug('Navigating to edit procedure', { 
+                                  procedureId: procedure.id,
+                                  procedureName: procedure.template.name
+                                })}
                               >
                                 <PencilIcon className="h-5 w-5" />
                                 <span className="sr-only">Edit</span>

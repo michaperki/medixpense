@@ -3,11 +3,15 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/context/AuthContext";
+import { getLogger, LogContext } from "@/lib/logger";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { ErrorAlert } from "@/components/ui/ErrorAlert";
 import SettingsForm from "@/components/settings/SettingsForm";
 import { settingsApi } from "@/services/settingsService";
 import { useToast } from "@/hooks/useToast";
+
+// Create a settings-specific logger
+const settingsLogger = getLogger(LogContext.RENDER);
 
 export default function SettingsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -15,52 +19,104 @@ export default function SettingsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState({});
-
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('general');
 
+  // Log page initialization
   useEffect(() => {
+    settingsLogger.info('Settings page initialized');
+    
+    return () => {
+      settingsLogger.debug('Settings page unmounted');
+    };
+  }, []);
+
+  // Handle authentication and load settings
+  useEffect(() => {
+    settingsLogger.debug('Auth state changed', { 
+      isLoading: authLoading, 
+      isAuthenticated: !!user,
+      userId: user?.id
+    });
+
     if (authLoading) return;
     
     if (!user) {
+      settingsLogger.info('Unauthenticated user, redirecting to login', {
+        redirectTarget: '/provider/settings'
+      });
       router.push("/login?redirect=/provider/settings");
       return;
     }
     
-    async function loadSettings() {
-      try {
-        setLoading(true);
-        const data = await settingsApi.getProviderSettings();
-        setSettings(data);
-      } catch (err) {
-        console.error("Error loading settings:", err);
-        setError(err.message || "Failed to load settings data");
-        showToast({
-          type: "error",
-          message: "Failed to load settings data",
-        });
-      } finally {
-        setLoading(false);
-      }
-    }
-    
     loadSettings();
-  }, [user, authLoading, router, showToast]);
+  }, [user, authLoading, router]);
 
-  const handleSubmit = async (formData) => {
+  // Load settings data with logger
+  const loadSettings = async () => {
+    settingsLogger.info('Loading provider settings');
+    
     try {
       setLoading(true);
-      const updatedSettings = await settingsApi.updateProviderSettings({
-        ...formData,
-        settingsType: activeTab
+      
+      // Use time tracking for performance monitoring
+      const data = await settingsLogger.time('Fetch provider settings', async () => {
+        return settingsApi.getProviderSettings();
       });
+      
+      settingsLogger.debug('Settings loaded successfully', {
+        settingsKeys: Object.keys(data),
+        hasData: Object.keys(data).length > 0
+      });
+      
+      setSettings(data);
+      setError(null);
+    } catch (err) {
+      settingsLogger.error('Failed to load settings', err);
+      setError(err.message || "Failed to load settings data");
+      showToast({
+        type: "error",
+        message: "Failed to load settings data",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Handle settings update with logger
+  const handleSubmit = async (formData) => {
+    settingsLogger.info('Submitting settings update', { 
+      settingsType: activeTab,
+      formFields: Object.keys(formData)
+    });
+    
+    try {
+      setLoading(true);
+      
+      // Track performance of settings update
+      const updatedSettings = await settingsLogger.time('Update provider settings', async () => {
+        return settingsApi.updateProviderSettings({
+          ...formData,
+          settingsType: activeTab
+        });
+      });
+      
+      settingsLogger.debug('Settings updated successfully', {
+        settingsType: activeTab,
+        updatedKeys: Object.keys(updatedSettings)
+      });
+      
       setSettings(updatedSettings);
       showToast({
         type: "success",
         message: "Settings updated successfully",
       });
     } catch (err) {
-      console.error("Error updating settings:", err);
+      settingsLogger.error('Failed to update settings', {
+        settingsType: activeTab,
+        error: err
+      });
+      
       setError(err.message || "Failed to update settings");
       showToast({
         type: "error",
@@ -71,10 +127,32 @@ export default function SettingsPage() {
     }
   };
 
+  // Log tab change
+  const handleTabChange = (tab) => {
+    settingsLogger.debug('Changed active settings tab', { 
+      previousTab: activeTab, 
+      newTab: tab 
+    });
+    
+    setActiveTab(tab);
+  };
+
+  // Log rendering state
+  useEffect(() => {
+    if (!authLoading) {
+      settingsLogger.debug('Settings page render state', {
+        isLoading: loading,
+        hasError: !!error,
+        activeTab,
+        hasSettings: Object.keys(settings).length > 0
+      });
+    }
+  }, [loading, error, settings, activeTab, authLoading]);
+  
   if (authLoading || loading) {
     return <LoadingSpinner size="lg" className="py-20" />;
   }
-
+  
   return (
     <div className="py-6">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -87,7 +165,7 @@ export default function SettingsPage() {
             {['general', 'notifications', 'security', 'billing'].map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => handleTabChange(tab)}
                 className={`px-3 py-2 font-medium text-sm rounded-md ${
                   activeTab === tab
                     ? 'bg-blue-100 text-blue-700'

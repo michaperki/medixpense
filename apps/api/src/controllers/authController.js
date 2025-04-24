@@ -61,42 +61,18 @@ export async function signupController(req, res) {
  * POST /api/auth/login
  */
 export async function loginController(req, res) {
-
   const { email, password } = req.body;
-  console.log('Login request body:', req.body);
-
 
   try {
-    // 1. Lookup user
-    const user = await prisma.user.findUnique({
-      where: { email }
-    });
-    if (!user) {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || user.status !== 'ACTIVE') {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    // 2. Check account status
-    if (user.status !== 'ACTIVE') {
-      return res.status(403).json({ message: 'User is not active' });
-    }
-
     // 3. Verify password
-    // 3. Verify password
-    console.log('Input password:', password);
-    console.log('Stored hash:', user.passwordHash);
-
-    // Temporarily bypass password check for debugging
-    const valid = true; // await bcrypt.compare(password, user.passwordHash);
-
+    const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
       console.log('Password validation failed for:', email);
-      return res.status(400).json({ message: 'Invalid credentials' });
-    }
-    // In loginController, add this before returning the 400 error
-    if (!valid) {
-      console.log('Password validation failed for:', email);
-      console.log('Input password:', password);
-      console.log('Stored hash:', user.passwordHash);
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
@@ -104,7 +80,7 @@ export async function loginController(req, res) {
     const token = generateToken(user);
 
     // 5. Return user info + token
-    res.json({
+    return res.json({
       user: {
         id: user.id,
         email: user.email,
@@ -116,7 +92,7 @@ export async function loginController(req, res) {
     });
   } catch (err) {
     console.error('Login error:', err);
-    res.status(500).json({ message: 'Internal server error' });
+    return res.status(500).json({ message: 'Internal server error' });
   }
 }
 

@@ -1,4 +1,5 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import { apiLogger } from '@/lib/logger';
 
 // API response interface for standardized responses
 export interface ApiResponse<T = any> {
@@ -28,6 +29,8 @@ class ApiClient {
       timeout: 30000,
     });
     this.setupInterceptors();
+    
+    apiLogger.info('ApiClient initialized', { baseUrl });
   }
 
   private setupInterceptors() {
@@ -39,8 +42,14 @@ class ApiClient {
           config.headers.Authorization = `Bearer ${token}`;
         }
       }
-      // Log the full URL being requested
-      console.log(`Request to: ${this.baseUrl}${config.url}`);
+      
+      const url = `${this.baseUrl}${config.url}`;
+      apiLogger.debug(`Request prepared`, { 
+        url, 
+        method: config.method?.toUpperCase(),
+        hasBody: !!config.data
+      });
+      
       return config;
     });
 
@@ -52,6 +61,7 @@ class ApiClient {
         if (error.response?.status === 401 && typeof window !== 'undefined') {
           const isLogin = error.config?.url?.includes('/auth/login');
           if (!isLogin) {
+            apiLogger.warn('Unauthorized access detected, redirecting to login');
             localStorage.removeItem('authToken');
             localStorage.removeItem('user');
             window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
@@ -66,9 +76,12 @@ class ApiClient {
           traceId: error.response?.headers?.['x-trace-id'],
         };
 
-        if (process.env.NODE_ENV === 'development') {
-          console.error('API Error:', err);
-        }
+        apiLogger.error('API request failed', { 
+          url: error.config?.url,
+          status: err.status,
+          message: err.message,
+          traceId: err.traceId
+        });
 
         return Promise.reject(err);
       }
@@ -87,102 +100,195 @@ class ApiClient {
 
   // Helper method to handle API responses with flexible structure
   private handleResponse<T>(response: any): T {
-    console.log('ApiClient handleResponse input:', response);
+    apiLogger.debug('Processing API response');
     
     // Add a safety check for null or undefined responses
     if (response === null || response === undefined) {
-      console.error('ApiClient received null or undefined response');
+      apiLogger.warn('Received null or undefined API response');
       return response as T;
     }
     
     // If the response follows the standard ApiResponse structure
     if (response && typeof response === 'object' && 'success' in response && 'data' in response) {
-      console.log('ApiClient: Standard API response structure detected');
+      apiLogger.debug('Standard API response structure detected');
       return response.data as T;
     }
     
     // If the response is already in the expected format
-    console.log('ApiClient: Returning direct response');
+    apiLogger.debug('Using direct response format');
     return response as T;
   }
 
   async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    console.log(`ApiClient: GET request to ${url}`, config);
+    apiLogger.group(`GET ${url}`, () => {
+      apiLogger.debug('Request details', { params: config?.params });
+    });
+    
     try {
       const res = await this.client.get<T>(url, config);
-      console.log('→ Response data:', res.data);
+      
+      apiLogger.group(`Response: GET ${url}`, () => {
+        apiLogger.debug('Status', { 
+          status: res.status, 
+          statusText: res.statusText 
+        });
+        apiLogger.debug('Response size', { 
+          bytes: JSON.stringify(res.data).length 
+        });
+      });
+      
       const processedResponse = this.handleResponse<T>(res.data);
-      console.log('→ Processed response:', processedResponse);
       return processedResponse;
     } catch (error) {
-      console.error(`ApiClient: Error in GET request to ${url}:`, error);
+      // Error is already logged in the interceptor
       throw error;
     }
   }
 
   async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    console.log(`ApiClient: POST request to ${url}`, data);
+    apiLogger.group(`POST ${url}`, () => {
+      apiLogger.debug('Request details', { 
+        params: config?.params,
+        dataFields: data ? Object.keys(data) : [] 
+      });
+    });
+    
     try {
       const res = await this.client.post<T>(url, data ?? {}, config);
+      
+      apiLogger.group(`Response: POST ${url}`, () => {
+        apiLogger.debug('Status', { 
+          status: res.status, 
+          statusText: res.statusText 
+        });
+        apiLogger.debug('Response size', { 
+          bytes: JSON.stringify(res.data).length 
+        });
+      });
+      
       const processedResponse = this.handleResponse<T>(res.data);
-      console.log('→ POST Response processed:', processedResponse);
       return processedResponse;
     } catch (error) {
-      console.error(`ApiClient: Error in POST request to ${url}:`, error);
+      // Error is already logged in the interceptor
       throw error;
     }
   }
 
   async put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    console.log(`ApiClient: PUT request to ${url}`, data);
+    apiLogger.group(`PUT ${url}`, () => {
+      apiLogger.debug('Request details', { 
+        params: config?.params,
+        dataFields: data ? Object.keys(data) : [] 
+      });
+    });
+    
     try {
       const res = await this.client.put<T>(url, data, config);
+      
+      apiLogger.group(`Response: PUT ${url}`, () => {
+        apiLogger.debug('Status', { 
+          status: res.status, 
+          statusText: res.statusText 
+        });
+        apiLogger.debug('Response size', { 
+          bytes: JSON.stringify(res.data).length 
+        });
+      });
+      
       const processedResponse = this.handleResponse<T>(res.data);
-      console.log('→ PUT Response processed:', processedResponse);
       return processedResponse;
     } catch (error) {
-      console.error(`ApiClient: Error in PUT request to ${url}:`, error);
+      // Error is already logged in the interceptor
       throw error;
     }
   }
 
   async patch<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    console.log(`ApiClient: PATCH request to ${url}`, data);
+    apiLogger.group(`PATCH ${url}`, () => {
+      apiLogger.debug('Request details', { 
+        params: config?.params,
+        dataFields: data ? Object.keys(data) : [] 
+      });
+    });
+    
     try {
       const res = await this.client.patch<T>(url, data, config);
+      
+      apiLogger.group(`Response: PATCH ${url}`, () => {
+        apiLogger.debug('Status', { 
+          status: res.status, 
+          statusText: res.statusText 
+        });
+        apiLogger.debug('Response size', { 
+          bytes: JSON.stringify(res.data).length 
+        });
+      });
+      
       const processedResponse = this.handleResponse<T>(res.data);
-      console.log('→ PATCH Response processed:', processedResponse);
       return processedResponse;
     } catch (error) {
-      console.error(`ApiClient: Error in PATCH request to ${url}:`, error);
+      // Error is already logged in the interceptor
       throw error;
     }
   }
 
   async delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    console.log(`ApiClient: DELETE request to ${url}`);
+    apiLogger.group(`DELETE ${url}`, () => {
+      apiLogger.debug('Request details', { 
+        params: config?.params 
+      });
+    });
+    
     try {
       const res = await this.client.delete<T>(url, config);
+      
+      apiLogger.group(`Response: DELETE ${url}`, () => {
+        apiLogger.debug('Status', { 
+          status: res.status, 
+          statusText: res.statusText 
+        });
+        apiLogger.debug('Response size', { 
+          bytes: JSON.stringify(res.data).length 
+        });
+      });
+      
       const processedResponse = this.handleResponse<T>(res.data);
-      console.log('→ DELETE Response processed:', processedResponse);
       return processedResponse;
     } catch (error) {
-      console.error(`ApiClient: Error in DELETE request to ${url}:`, error);
+      // Error is already logged in the interceptor
       throw error;
     }
   }
 
   async uploadFile<T>(url: string, formData: FormData): Promise<T> {
-    console.log(`ApiClient: File upload to ${url}`);
+    apiLogger.group(`File upload to ${url}`, () => {
+      // Log file information without logging the actual file contents
+      const fileEntries: string[] = [];
+      formData.forEach((value, key) => {
+        if (value instanceof File) {
+          fileEntries.push(`${key}: ${value.name} (${value.size} bytes)`);
+        } else {
+          fileEntries.push(key);
+        }
+      });
+      
+      apiLogger.debug('Upload details', { files: fileEntries });
+    });
+    
     try {
       const res = await this.client.post<T>(url, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
+      
+      apiLogger.info('File upload completed successfully', {
+        url,
+        status: res.status
+      });
+      
       const processedResponse = this.handleResponse<T>(res.data);
-      console.log('→ Upload Response processed:', processedResponse);
       return processedResponse;
     } catch (error) {
-      console.error(`ApiClient: Error in file upload to ${url}:`, error);
+      apiLogger.error('File upload failed', { url });
       throw error;
     }
   }

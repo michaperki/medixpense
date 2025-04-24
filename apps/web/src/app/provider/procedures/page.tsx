@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { proceduresApi } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { useAuth } from '@/app/context/AuthContext';
+import { getLogger, LogContext } from '@/lib/logger';
 import { 
   PlusIcon, 
   PencilIcon, 
@@ -18,6 +19,9 @@ import {
   MagnifyingGlassIcon,
   MapPinIcon
 } from '@heroicons/react/24/outline';
+
+// Create a procedures-specific logger
+const proceduresLogger = getLogger(LogContext.RENDER)
 
 type Procedure = {
   id: string;
@@ -47,7 +51,7 @@ type SortDirection = 'asc' | 'desc';
 export default function ProceduresPage() {
   const router = useRouter();
   const { showToast } = useToast();
-  const { user } = useAuth(); // Move useAuth hook to the top level of the component
+  const { user } = useAuth();
   
   // State
   const [procedures, setProcedures] = useState<Procedure[]>([]);
@@ -67,39 +71,58 @@ export default function ProceduresPage() {
   // Fetch data on component mount
   useEffect(() => {
     const fetchProceduresAndFilters = async () => {
+      proceduresLogger.info('Fetching provider procedures data');
+      
       try {
         setLoading(true);
         
         // Get current user provider ID from auth context
         const providerId = user?.provider?.id;
         
-        console.log('User:', user);
-        console.log('Provider ID:', providerId);
+        proceduresLogger.debug('User provider info', { 
+          userId: user?.id, 
+          providerId: providerId 
+        });
         
         if (!providerId) {
-          setError('Provider ID not found. Please check your login status.');
+          const errorMsg = 'Provider ID not found. Please check your login status.';
+          proceduresLogger.warn('Missing provider ID for procedures fetch', {
+            userId: user?.id,
+            userRole: user?.role
+          });
+          
+          setError(errorMsg);
           setLoading(false);
           return;
         }
         
-        // Fetch using the provider ID
-        const proceduresResponse = await proceduresApi.getProviderProcedures(providerId);
+        // Fetch using the provider ID with performance tracking
+        const proceduresResponse = await proceduresLogger.time('Fetch provider procedures', async () => {
+          return proceduresApi.getProviderProcedures(providerId);
+        });
         
         // Handle both object response {procedures: [...]} and direct array response [...]
         const proceduresData = Array.isArray(proceduresResponse) 
           ? proceduresResponse 
           : (proceduresResponse.procedures || []);
           
-        console.log('Procedures data:', proceduresData);
+        proceduresLogger.debug('Procedures data fetched', { 
+          count: proceduresData.length,
+          hasLocations: proceduresData.some(p => p.location?.id)
+        });
+        
         setProcedures(proceduresData);
         
         // No need to fetch specific locations/categories if we have no procedures
         if (proceduresData.length === 0) {
+          proceduresLogger.debug('No procedures found for provider', { providerId });
           setLoading(false);
           return;
         }
         
-        // Extract unique categories from procedures with safety checks
+        // Extract unique categories and locations with logging
+        proceduresLogger.debug('Extracting categories and locations from procedures');
+        
         const uniqueCategories: {id: string, name: string}[] = [];
         const uniqueLocations: {id: string, name: string}[] = [];
         
@@ -134,13 +157,18 @@ export default function ProceduresPage() {
           }
         });
         
+        proceduresLogger.debug('Extracted filter data', { 
+          categoryCount: uniqueCategories.length,
+          locationCount: uniqueLocations.length
+        });
+        
         // Set state with extracted data
         setCategories(uniqueCategories);
         setLocations(uniqueLocations);
         
         setError(null);
       } catch (err) {
-        console.error('Error fetching procedures:', err);
+        proceduresLogger.error('Failed to fetch procedures data', err);
         setError('Failed to load procedures. Please try again later.');
       } finally {
         setLoading(false);
@@ -148,19 +176,49 @@ export default function ProceduresPage() {
     };
 
     fetchProceduresAndFilters();
-  }, [user]); // Add user as a dependency since we're using it in the effect
+  }, [user]);
   
   // Handle sorting
   const handleSort = (field: SortField) => {
+    proceduresLogger.debug('Sorting procedures', { 
+      currentField: sortField, 
+      newField: field, 
+      currentDirection: sortDirection 
+    });
+    
     if (field === sortField) {
       // Toggle direction if clicking the same field
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      const newDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      setSortDirection(newDirection);
+      
+      proceduresLogger.debug('Changed sort direction', { 
+        field, 
+        newDirection 
+      });
     } else {
       // Default to ascending for new sort field
       setSortField(field);
       setSortDirection('asc');
+      
+      proceduresLogger.debug('Changed sort field', { 
+        oldField: sortField, 
+        newField: field 
+      });
     }
   };
+  
+  // Log when filter criteria change
+  useEffect(() => {
+    if (!loading) {
+      proceduresLogger.debug('Filter/sort criteria updated', {
+        searchTerm: searchTerm || '(none)',
+        category: selectedCategory || '(all)',
+        location: selectedLocation || '(all)',
+        sortField,
+        sortDirection
+      });
+    }
+  }, [searchTerm, selectedCategory, selectedLocation, sortField, sortDirection, loading]);
   
   // Get sorted and filtered procedures with safety checks
   const filteredAndSortedProcedures = procedures
@@ -208,26 +266,64 @@ export default function ProceduresPage() {
       return 0;
     });
   
+  // Log any filtering results
+  useEffect(() => {
+    if (!loading && procedures.length > 0) {
+      proceduresLogger.debug('Filtered procedures result', {
+        totalProcedures: procedures.length,
+        filteredCount: filteredAndSortedProcedures.length,
+        isFiltered: filteredAndSortedProcedures.length !== procedures.length
+      });
+    }
+  }, [filteredAndSortedProcedures.length, procedures.length, loading]);
+  
   // Handle procedure deletion
   const handleDeleteClick = (procedure: Procedure) => {
+    proceduresLogger.debug('Delete procedure dialog opened', { 
+      procedureId: procedure.id,
+      procedureName: procedure.template?.name,
+      locationName: procedure.location?.name
+    });
+    
     setProcedureToDelete(procedure);
     setDeleteModalOpen(true);
   };
   
   const handleCancelDelete = () => {
+    proceduresLogger.debug('Delete procedure canceled', {
+      procedureId: procedureToDelete?.id
+    });
+    
     setProcedureToDelete(null);
     setDeleteModalOpen(false);
   };
   
   const handleConfirmDelete = async () => {
-    if (!procedureToDelete) return;
+    if (!procedureToDelete) {
+      proceduresLogger.warn('Attempted to confirm delete with no procedure selected');
+      return;
+    }
+    
+    proceduresLogger.info('Deleting procedure', { 
+      id: procedureToDelete.id,
+      name: procedureToDelete.template?.name,
+      location: procedureToDelete.location?.name
+    });
     
     try {
       setIsDeleting(true);
-      await proceduresApi.deletePrice(procedureToDelete.id);
+      
+      // Track performance of deletion
+      await proceduresLogger.time('Delete procedure', async () => {
+        await proceduresApi.deletePrice(procedureToDelete.id);
+      });
       
       // Update state
       setProcedures(prev => prev.filter(proc => proc.id !== procedureToDelete.id));
+      
+      proceduresLogger.info('Procedure deleted successfully', {
+        id: procedureToDelete.id
+      });
       
       // Show success message
       showToast('Procedure deleted successfully', 'success');
@@ -236,12 +332,30 @@ export default function ProceduresPage() {
       setDeleteModalOpen(false);
       setProcedureToDelete(null);
     } catch (err) {
-      console.error('Error deleting procedure:', err);
+      proceduresLogger.error('Failed to delete procedure', {
+        id: procedureToDelete.id,
+        error: err
+      });
+      
       showToast('Failed to delete procedure', 'error');
     } finally {
       setIsDeleting(false);
     }
   };
+  
+  // Log component rendering state
+  useEffect(() => {
+    if (!loading) {
+      proceduresLogger.debug('Procedures page render state', {
+        isLoading: loading,
+        hasError: !!error,
+        procedureCount: procedures.length,
+        filteredCount: filteredAndSortedProcedures.length,
+        categoryCount: categories.length,
+        locationCount: locations.length
+      });
+    }
+  }, [loading, error, procedures.length, filteredAndSortedProcedures.length, categories.length, locations.length]);
   
   if (loading) {
     return (
