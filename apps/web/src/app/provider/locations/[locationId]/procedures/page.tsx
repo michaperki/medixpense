@@ -118,15 +118,19 @@ export default function ProceduresPage() {
       // Try to fetch procedures, but don't let it break the page if it fails
       try {
         // Track procedure fetch performance
-        const proceduresResponse = await locationProceduresLogger.time('Fetch location procedures', async () => {
-          return proceduresApi.getProviderProcedures({ locationId });
-        });
+        locationProceduresLogger.debug('Calling getProviderProcedures()', { locationId });
+        const proceduresResponse = await proceduresApi.getProviderProcedures({ locationId });
         
         // Handle different response structures for procedures
-        const proceduresData = 
-          proceduresResponse?.procedures || 
-          (proceduresResponse?.data ? proceduresResponse.data.procedures : []) ||
-          [];
+        const proceduresData = Array.isArray(proceduresResponse)
+          ? proceduresResponse
+          : proceduresResponse?.procedures ?? proceduresResponse?.data?.procedures ?? [];
+
+        if (!Array.isArray(proceduresData)) {
+          locationProceduresLogger.error('Unexpected response shape for procedures', { proceduresResponse });
+          setProcedures([]);
+          return;
+        }
         
         locationProceduresLogger.debug('Procedures data fetched', {
           count: proceduresData.length,

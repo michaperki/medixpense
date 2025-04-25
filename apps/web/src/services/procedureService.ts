@@ -178,6 +178,7 @@ export class ProcedureService {
         // Otherwise use the general endpoint
         procedureLogger.debug('Using general provider procedures endpoint');
         result = await apiClient.get<ProceduresResponse>('/procedures/provider', { params });
+        procedureLogger.debug('Received raw data', { result });
       }
       
       procedureLogger.debug('Provider procedures fetched successfully', { 

@@ -5,7 +5,10 @@ import pino from 'pino';
 const isServer = typeof window === 'undefined';
 
 export const pinoLogger = isServer
-  ? pino({ level: process.env.NODE_ENV === 'production' ? 'info' : 'debug' }, pino.destination(1))
+  ? pino({
+      level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+      transport: undefined, // explicitly omit
+    })
   : pino({
       level: 'debug',
       transport: {
@@ -13,9 +16,9 @@ export const pinoLogger = isServer
         options: {
           colorize: true,
           translateTime: 'SYS:standard',
-          ignore: 'pid,hostname'
-        }
-      }
+          ignore: 'pid,hostname',
+        },
+      },
     });
 
 export function loggingMiddleware(req, res, next) {
