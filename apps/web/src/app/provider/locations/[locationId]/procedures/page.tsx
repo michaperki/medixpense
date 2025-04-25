@@ -95,12 +95,10 @@ export default function ProceduresPage() {
       setLoading(true);
       
       // Fetch location details with performance tracking
-      const locationResponse = await locationProceduresLogger.time('Fetch location details', async () => {
-        return locationsApi.getById(locationId);
-      });
+      const locationData = await locationsApi.getById(locationId);
+      locationProceduresLogger.debug('Fetched location', { locationData });
+      setLocation(locationData);
       
-      // Handle both possible response structures
-      const locationData = locationResponse.location || locationResponse;
       
       if (!locationData) {
         const errorMsg = 'Location data not found';
@@ -115,7 +113,8 @@ export default function ProceduresPage() {
       });
       
       setLocation(locationData);
-      
+      locationProceduresLogger.debug('Location set in state', { location: locationData });
+
       // Try to fetch procedures, but don't let it break the page if it fails
       try {
         // Track procedure fetch performance
@@ -571,6 +570,7 @@ export default function ProceduresPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search procedures"
+              style={{ paddingLeft: '2rem' }} // ✅ Apply here
               className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             />
           </div>

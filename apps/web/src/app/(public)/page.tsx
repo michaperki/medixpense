@@ -2,7 +2,7 @@
 
 'use client';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getLogger, LogContext } from '@/lib/logger';
 
@@ -14,8 +14,11 @@ export default function HomePage() {
   const [procedure, setProcedure] = useState('');
   const [location, setLocation] = useState('');
 
-  // log initial mount
+  // src/app/(public)/page.tsx
+  const didLog = useRef(false);
   useEffect(() => {
+    if (didLog.current) return;
+    didLog.current = true;
     renderLogger.info('HomePage mounted');
     return () => renderLogger.info('HomePage unmounted');
   }, []);

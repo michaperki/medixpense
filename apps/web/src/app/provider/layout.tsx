@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
@@ -21,6 +21,8 @@ export default function ProviderLayout({ children }: { children: React.ReactNode
   const { user, isAuthenticated, loading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname(); // Get the current path
+
+  const firstRender = useRef(true);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -71,10 +73,10 @@ export default function ProviderLayout({ children }: { children: React.ReactNode
       : `${baseClasses} text-blue-100 hover:bg-blue-700`;
   };
 
-  layoutLogger.debug('Rendering provider layout', { 
-    pathname,
-    userHasProvider: !!user?.provider
-  });
+  if (firstRender.current) {
+    firstRender.current = false;
+    layoutLogger.info('Rendering provider layout', { pathname, userHasProvider: !!user?.provider });
+  }
 
   return (
     <div className="min-h-screen flex">

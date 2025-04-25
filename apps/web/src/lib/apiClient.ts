@@ -1,4 +1,4 @@
-
+// src/lib/apiClient.ts
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { apiLogger, createReqId } from '@/lib/logger';
 
@@ -14,6 +14,17 @@ export interface ApiError {
   message: string;
   errors?: Record<string, string[]>;
   traceId?: string;
+}
+
+function logResponse(reqId: string, config: AxiosRequestConfig, data: any, status: number) {
+  const ms = Math.round(performance.now() - ((config as any)._t0 || 0));
+  const size = `${(JSON.stringify(data).length / 1024).toFixed(1)} kB`;
+  apiLogger.info(`✅ ${reqId} →${status} ${config.url} (${ms} ms, ${size})`);
+}
+
+function logError(reqId: string, config: AxiosRequestConfig, error: ApiError) {
+  const ms = Math.round(performance.now() - ((config as any)._t0 || 0));
+  apiLogger.error(`❌ ${reqId} ${config.url} → ${error.status} (${ms} ms)`, error);
 }
 
 class ApiClient {
@@ -37,6 +48,7 @@ class ApiClient {
       config.headers = config.headers || {};
       config.headers['x-request-id'] = reqId;
       (config as any)._reqId = reqId;
+      (config as any)._t0 = performance.now();
 
       if (typeof window !== 'undefined') {
         const token = localStorage.getItem('authToken');
@@ -50,21 +62,12 @@ class ApiClient {
     this.client.interceptors.response.use(
       (res) => {
         const reqId = (res.config as any)._reqId || '?';
-        apiLogger.info(`✅ ${reqId} →${res.status} ${res.config.url}`);
+        logResponse(reqId, res.config, res.data, res.status);
         return res;
       },
       (error: AxiosError) => {
         const config = error.config || {};
         const reqId = (config as any)._reqId || '?';
-
-        if (error.response?.status === 401 && typeof window !== 'undefined') {
-          if (!config.url?.includes('/auth/login')) {
-            apiLogger.warn(`${reqId} Unauthorized → redirecting to login`);
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('user');
-            window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
-          }
-        }
 
         const err: ApiError = {
           status: error.response?.status || 500,
@@ -73,7 +76,14 @@ class ApiClient {
           traceId: error.response?.headers?.['x-trace-id'],
         };
 
-        apiLogger.error(`❌ ${reqId} ${config.url} → ${err.status}`, err);
+        if (err.status === 401 && typeof window !== 'undefined' && !config.url?.includes('/auth/login')) {
+          apiLogger.warn(`${reqId} Unauthorized → redirecting to login`);
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('user');
+          window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+        }
+
+        logError(reqId, config, err);
         return Promise.reject(err);
       }
     );
@@ -103,28 +113,63 @@ class ApiClient {
   }
 
   async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const res = await this.client.get<T>(url, config);
-    return this.handleResponse<T>(res.data);
+    const t = apiLogger.timer(`GET ${url}`);
+    try {
+      const res = await this.client.get<T>(url, config);
+      t.done();
+      return this.handleResponse<T>(res.data);
+    } catch (err) {
+      t.fail(err);
+      throw err;
+    }
   }
 
   async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const res = await this.client.post<T>(url, data ?? {}, config);
-    return this.handleResponse<T>(res.data);
+    const t = apiLogger.timer(`POST ${url}`);
+    try {
+      const res = await this.client.post<T>(url, data ?? {}, config);
+      t.done();
+      return this.handleResponse<T>(res.data);
+    } catch (err) {
+      t.fail(err);
+      throw err;
+    }
   }
 
   async put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const res = await this.client.put<T>(url, data, config);
-    return this.handleResponse<T>(res.data);
+    const t = apiLogger.timer(`PUT ${url}`);
+    try {
+      const res = await this.client.put<T>(url, data, config);
+      t.done();
+      return this.handleResponse<T>(res.data);
+    } catch (err) {
+      t.fail(err);
+      throw err;
+    }
   }
 
   async patch<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const res = await this.client.patch<T>(url, data, config);
-    return this.handleResponse<T>(res.data);
+    const t = apiLogger.timer(`PATCH ${url}`);
+    try {
+      const res = await this.client.patch<T>(url, data, config);
+      t.done();
+      return this.handleResponse<T>(res.data);
+    } catch (err) {
+      t.fail(err);
+      throw err;
+    }
   }
 
   async delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const res = await this.client.delete<T>(url, config);
-    return this.handleResponse<T>(res.data);
+    const t = apiLogger.timer(`DELETE ${url}`);
+    try {
+      const res = await this.client.delete<T>(url, config);
+      t.done();
+      return this.handleResponse<T>(res.data);
+    } catch (err) {
+      t.fail(err);
+      throw err;
+    }
   }
 
   async uploadFile<T>(url: string, formData: FormData): Promise<T> {
@@ -133,7 +178,9 @@ class ApiClient {
       if (value instanceof File) fileSummary.push(`${key}: ${value.name} (${value.size} bytes)`);
     });
 
-    apiLogger.info('▶️ File upload', { url, files: fileSummary });
+    apiLogger.group('Uploading files', () => {
+      apiLogger.info('▶️ File upload', { url, files: fileSummary });
+    });
 
     const res = await this.client.post<T>(url, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -146,4 +193,3 @@ class ApiClient {
 
 const apiClient = new ApiClient();
 export default apiClient;
-

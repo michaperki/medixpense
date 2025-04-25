@@ -1,6 +1,5 @@
-
 // ----------------------------
-// core.ts
+// core.ts – polished v2
 // ----------------------------
 
 export enum LogLevel { DEBUG = 0, INFO = 1, WARN = 2, ERROR = 3, NONE = 4 }
@@ -66,26 +65,19 @@ const seen = new Map<string, { ts: number; n: number; log: () => void }>();
 const DEDUPE_MS = 2000;
 
 function printOnce(key: string, printer: () => void) {
-  if (!cfg.dedupe) {
-    printer();
-    return;
-  }
-
+  if (!cfg.dedupe) return printer();
   const now = Date.now();
   const rec = seen.get(key);
-
   if (rec && now - rec.ts < DEDUPE_MS) {
     rec.n += 1;
     rec.ts = now;
     return;
   }
-
   const wrapper = () => {
     const hit = seen.get(key);
     printer();
     if (hit && hit.n > 1) console.info(`${key} (x${hit.n})`);
   };
-
   seen.set(key, { ts: now, n: 1, log: wrapper });
   setTimeout(() => {
     const h = seen.get(key);
@@ -101,24 +93,28 @@ export function createLogger(ctx: LogContext | string) {
   const enabled = () => cfg.enabledContexts.has(ctx);
   const fmt = (m: string) => `${tag} ${m}`;
 
+  let chainedFields: Record<string, any> = {};
+
   const out = {
     debug(msg: string, data?: any) {
       if (cfg.level > LogLevel.DEBUG || !enabled()) return;
       const key = fmt(msg);
-      printOnce(key, () => data === undefined ? console.debug(key) : console.debug(key, redact(data)));
+      printOnce(key, () => data === undefined ? console.debug(key, chainedFields) : console.debug(key, { ...chainedFields, ...redact(data) }));
     },
     info(msg: string, data?: any) {
       if (cfg.level > LogLevel.INFO || !enabled()) return;
       const key = fmt(msg);
-      printOnce(key, () => data === undefined ? console.info(key) : console.info(key, redact(data)));
+      printOnce(key, () => data === undefined ? console.info(key, chainedFields) : console.info(key, { ...chainedFields, ...redact(data) }));
     },
     warn(msg: string, data?: any) {
       if (cfg.level > LogLevel.WARN || !enabled()) return;
-      data === undefined ? console.warn(fmt(msg)) : console.warn(fmt(msg), redact(data));
+      const payload = data === undefined ? chainedFields : { ...chainedFields, ...redact(data) };
+      console.warn(fmt(msg), payload);
     },
     error(msg: string, err?: any) {
       if (cfg.level > LogLevel.ERROR || !enabled()) return;
-      err === undefined ? console.error(fmt(msg)) : console.error(fmt(msg), err);
+      const payload = err === undefined ? chainedFields : { ...chainedFields, ...err };
+      console.error(fmt(msg), payload);
     },
     group(title: string, run: () => void, opts: { collapsed?: boolean } = { collapsed: true }) {
       if (!enabled()) return;
@@ -144,20 +140,22 @@ export function createLogger(ctx: LogContext | string) {
           out.error(`❌ ${label} ${Math.round(performance.now() - t0)} ms`, err);
         }
       };
+    },
+    with(fields: Record<string, any>) {
+      chainedFields = { ...chainedFields, ...fields };
+      return out;
     }
   };
 
   return out;
 }
 
-// --- Request ID helper ---
 let reqCounter = 0;
 export function createReqId(prefix = 'R'): string {
   reqCounter = (reqCounter + 1) % 10000;
   return `${prefix}${reqCounter.toString().padStart(3, '0')}`;
 }
 
-// --- Pre-made loggers ---
 export function getLogger(c: LogContext | string) { return createLogger(c); }
 
 export const authLogger   = createLogger(LogContext.AUTH);
@@ -165,4 +163,3 @@ export const apiLogger    = createLogger(LogContext.API);
 export const routerLogger = createLogger(LogContext.ROUTER);
 export const renderLogger = createLogger(LogContext.RENDER);
 export const dataLogger   = createLogger(LogContext.DATA);
-

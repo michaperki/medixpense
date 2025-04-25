@@ -52,23 +52,17 @@ export interface LocationCreateData {
 const locationService = {
   // Get all locations with pagination
   getAll: async (params: LocationParams = {}): Promise<LocationPaginatedResponse> => {
-    locationLogger.debug('Fetching locations', { params });
-    
+    const t = locationLogger.timer('Fetch all locations');
     try {
-      // Use the time utility to track the duration of the API call
-      return await locationLogger.time('Fetch all locations', async () => {
-        const result = await apiClient.get('/locations', { params });
-        
-        // Log summary info about the fetched locations
-        locationLogger.debug('Locations fetched successfully', { 
-          count: result.locations?.length,
-          pagination: result.pagination
-        });
-        
-        return result;
-      }, /* logLevel */ 1); // Use INFO level for timing
+      const result = await apiClient.get('/locations', { params });
+      locationLogger.debug('Locations fetched successfully', { 
+        count: result.locations?.length,
+        pagination: result.pagination
+      });
+      t.done();
+      return result;
     } catch (error) {
-      locationLogger.error('Failed to fetch locations', error);
+      t.fail(error);
       throw error;
     }
   },

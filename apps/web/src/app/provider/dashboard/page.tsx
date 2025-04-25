@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/app/context/AuthContext';
 import { locationsApi, proceduresApi } from '@/lib/api';
@@ -20,6 +20,16 @@ export default function ProviderDashboard() {
   const [recentLocations, setRecentLocations] = useState<any[]>([]);
   const [topProcedures, setTopProcedures] = useState<any[]>([]);
 
+  const firstRender = useRef(true);
+
+  useEffect(() => {
+    if (!firstRender.current) return;
+    firstRender.current = false;
+    logger.info('Rendering ProviderDashboard', { pathname: '/provider/dashboard', userId: user?.id });
+  }, [user]);
+
+  const ran = useRef(false);
+
   useEffect(() => {
     const loadDashboard = async () => {
       if (!user) {
@@ -27,23 +37,21 @@ export default function ProviderDashboard() {
         return;
       }
 
-      const timer = logger.timer('Dashboard load');
+      const timer = logger.timer('Dashboard'); // static timer label
       const locId = createReqId('LOC');
       const procId = createReqId('PRC');
 
       try {
-        logger.info(`▶️ ${locId} GET /locations`);
         const locResp = await locationsApi.getAll(1, 10);
         const locations = locResp.locations ?? [];
         setRecentLocations(locations.slice(0, 3));
-        logger.info(`✅ ${locId} →${locResp.status || 200} ${locations.length} locations`);
+        logger.debug(`${locId} got ${locations.length} locations`);
 
         let procedures: any[] = [];
         if (user.provider?.id) {
-          logger.info(`▶️ ${procId} GET /provider/procedures`);
           const procResp = await proceduresApi.getProviderProcedures(user.provider.id);
           procedures = procResp.procedures ?? [];
-          logger.info(`✅ ${procId} →${procResp.status || 200} ${procedures.length} procedures`);
+          logger.debug(`${procId} got ${procedures.length} procedures`);
         } else {
           logger.warn('Provider ID not available, skipping procedure fetch');
         }
@@ -67,6 +75,9 @@ export default function ProviderDashboard() {
         timer.done();
       }
     };
+
+    if (ran.current || !user) return;
+    ran.current = true;
 
     setLoading(true);
     loadDashboard();

@@ -46,7 +46,7 @@ export default function LocationFormPage() {
   const { showToast } = useToast();
   
   // Get location ID from params (undefined for new locations)
-  const locationId = params.slug !== 'new' ? params.slug as string : undefined;
+  const locationId = params.locationId !== 'new' ? params.locationId as string : undefined;
   const isEditMode = !!locationId;
   
   // Form state
@@ -75,9 +75,9 @@ export default function LocationFormPage() {
         
         try {
           setIsLoading(true);
-          const response = await locationsApi.getById(locationId);
-          const location = response.data.location;
-          
+          const location = await locationsApi.getById(locationId);
+          locationLogger.debug('Fetched location object', { location });
+
           locationLogger.info('Location data fetched successfully', { 
             locationId,
             locationName: location.name 
@@ -340,7 +340,10 @@ export default function LocationFormPage() {
             <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
               {/* Location Name */}
               <div className="sm:col-span-4">
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                <label 
+                  htmlFor="name" 
+                  className="block text-sm font-medium text-gray-700"
+                >
                   Location Name *
                 </label>
                 <div className="mt-1 relative rounded-md shadow-sm">
@@ -353,12 +356,13 @@ export default function LocationFormPage() {
                     name="name"
                     value={formData.name}
                     onChange={handleChange}
-                    className={`pl-10 block w-full rounded-md ${
+                    placeholder="Main Hospital Campus"
+                    style={{ paddingLeft: '2rem' }} // ✅ Apply here
+                    className={`block w-full rounded-md ${
                       errors.name 
                         ? 'border-red-300 text-red-900 focus:ring-red-500 focus:border-red-500' 
                         : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
                     } sm:text-sm`}
-                    placeholder="Main Hospital Campus"
                   />
                 </div>
                 {errors.name && (
@@ -383,8 +387,9 @@ export default function LocationFormPage() {
                     name="address1"
                     value={formData.address1}
                     onChange={handleChange}
-                    className={`pl-10 block w-full rounded-md ${
-                      errors.address1 
+                    style={{ paddingLeft: '2rem' }} // ✅ Apply here
+                    className={`block w-full rounded-md ${
+                      errors.name 
                         ? 'border-red-300 text-red-900 focus:ring-red-500 focus:border-red-500' 
                         : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
                     } sm:text-sm`}
@@ -513,8 +518,9 @@ export default function LocationFormPage() {
                     name="phone"
                     value={formData.phone}
                     onChange={handleChange}
-                    className={`pl-10 block w-full rounded-md ${
-                      errors.phone 
+                    style={{ paddingLeft: '2rem' }} // ✅ Apply here
+                    className={`block w-full rounded-md ${
+                      errors.name 
                         ? 'border-red-300 text-red-900 focus:ring-red-500 focus:border-red-500' 
                         : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
                     } sm:text-sm`}
