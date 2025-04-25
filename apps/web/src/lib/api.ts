@@ -1,4 +1,3 @@
-// src/lib/api.ts
 
 import apiClient from './apiClient';
 import { getLogger } from '@/lib/logger';
@@ -15,126 +14,191 @@ const procedureLogger = getLogger('API:procedure');
 const searchLogger = getLogger('API:search');
 const notificationLogger = getLogger('API:notification');
 
+// ─── AUTH ──────────────────────────────────────────────────────
 export const authApi = {
-  login: (email: string, password: string) =>
-    authLogger.with({ email }).info('Attempt login') ||
-    apiClient.post('/auth/login', { email, password }),
+  login: async (email: string, password: string) => {
+    authLogger.with({ email }).info('Attempt login');
+    return apiClient.post('/auth/login', { email, password });
+  },
 
-  register: (data: any) =>
-    authLogger.with({ email: data.email }).info('Attempt register') ||
-    apiClient.post('/auth/register', data),
+  register: async (data: any) => {
+    authLogger.with({ email: data.email }).info('Attempt register');
+    return apiClient.post('/auth/register', data);
+  },
 
-  me: () => authLogger.info('Fetch current user') || apiClient.get('/auth/me'),
+  me: async () => {
+    authLogger.info('Fetch current user');
+    return apiClient.get('/auth/me');
+  },
 
-  logout: (...args: any[]) => authLogger.info('Logout') || authService?.logout(...args),
+  logout: (...args: any[]) => {
+    authLogger.info('Logout');
+    return authService?.logout(...args);
+  },
 
-  getCurrentUser: (...args: any[]) => authLogger.debug('Get cached user') || authService?.getCurrentUser(...args),
+  getCurrentUser: (...args: any[]) => {
+    authLogger.debug('Get cached user');
+    return authService?.getCurrentUser(...args);
+  },
 
-  updateProfile: (data: any, ...args: any[]) =>
-    authLogger.info('Profile update') || authService?.updateProfile(data, ...args),
+  updateProfile: async (data: any, ...args: any[]) => {
+    authLogger.info('Profile update');
+    return authService?.updateProfile(data, ...args);
+  },
 
-  requestPasswordReset: (email: string, ...args: any[]) =>
-    authLogger.with({ email }).info('Password reset request') || authService?.requestPasswordReset(email, ...args),
+  requestPasswordReset: async (email: string, ...args: any[]) => {
+    authLogger.with({ email }).info('Password reset request');
+    return authService?.requestPasswordReset(email, ...args);
+  },
 
-  resetPassword: (token: string, ...args: any[]) =>
-    authLogger.with({ token }).info('Password reset') || authService?.resetPassword(token, ...args),
+  resetPassword: async (token: string, ...args: any[]) => {
+    authLogger.with({ token }).info('Password reset');
+    return authService?.resetPassword(token, ...args);
+  },
 
-  verifyEmail: (token: string, ...args: any[]) =>
-    authLogger.with({ token }).info('Verify email') || authService?.verifyEmail(token, ...args),
+  verifyEmail: async (token: string, ...args: any[]) => {
+    authLogger.with({ token }).info('Verify email');
+    return authService?.verifyEmail(token, ...args);
+  },
 };
 
+// ─── LOCATIONS ─────────────────────────────────────────────────
 export const locationsApi = {
-  getAll: (page = 1, limit = 10) =>
-    locationLogger.with({ page, limit }).debug('Get all') ||
-    apiClient.get('/locations', { params: { page, limit } }),
+  getAll: async (page = 1, limit = 10) => {
+    locationLogger.with({ page, limit }).debug('Get all');
+    return apiClient.get('/locations', { params: { page, limit } });
+  },
 
-  getById: (id: string) =>
-    locationLogger.with({ id }).debug('Get by ID') ||
-    locationService.getById(id),
+  getById: async (id: string) => {
+    locationLogger.with({ id }).debug('Get by ID');
+    return locationService.getById(id);
+  },
 
-  create: (data: any) =>
-    locationLogger.with({ name: data.name }).info('Create') ||
-    apiClient.post('/locations', data),
+  create: async (data: any) => {
+    locationLogger.with({ name: data.name }).info('Create');
+    return apiClient.post('/locations', data);
+  },
 
-  update: (id: string, data: any) =>
-    locationLogger.with({ id }).info('Update') ||
-    apiClient.put(`/locations/${id}`, data),
+  update: async (id: string, data: any) => {
+    locationLogger.with({ id }).info('Update');
+    return apiClient.put(`/locations/${id}`, data);
+  },
 
-  delete: (id: string) =>
-    locationLogger.with({ id }).info('Delete') ||
-    apiClient.delete(`/locations/${id}`),
+  delete: async (id: string) => {
+    locationLogger.with({ id }).info('Delete');
+    return apiClient.delete(`/locations/${id}`);
+  },
 };
 
+// ─── PROCEDURES ────────────────────────────────────────────────
 export const proceduresApi = {
-  getCategories: () => procedureLogger.debug('Get categories') || procedureService.getCategories(),
+  getCategories: async () => {
+    procedureLogger.debug('Get categories');
+    return procedureService.getCategories();
+  },
 
-  getTemplates: (params?: any) =>
-    procedureLogger.debug('Get templates', params) || procedureService.getTemplates(params),
+  getTemplates: async (params?: any) => {
+    procedureLogger.debug('Get templates', params);
+    return procedureService.getTemplates(params);
+  },
 
-  getProviderProcedures: (providerId?: string, params?: any) =>
-    procedureLogger.with({ providerId }).debug('Get procedures') ||
-    procedureService.getProviderProcedures({ providerId, ...params }),
+  getProviderProcedures: async (providerId?: string, params?: any) => {
+    procedureLogger.with({ providerId }).debug('Get procedures');
+    return procedureService.getProviderProcedures({ providerId, ...params });
+  },
 
-  getProcedureById: (id: string) =>
-    procedureLogger.with({ id }).debug('Get by ID') ||
-    procedureService.getProcedureById(id),
+  getProcedureById: async (id: string) => {
+    procedureLogger.with({ id }).debug('Get by ID');
+    return procedureService.getProcedureById(id);
+  },
 
-  addPrice: (data: any) =>
-    procedureLogger.with({ templateId: data.templateId }).info('Add price') ||
-    procedureService.addPrice(data),
+  addPrice: async (data: any) => {
+    procedureLogger.with({ templateId: data.templateId }).info('Add price');
+    return procedureService.addPrice(data);
+  },
 
-  updatePrice: (id: string, data: any) =>
-    procedureLogger.with({ id }).info('Update price') ||
-    procedureService.updatePrice(id, data),
+  updatePrice: async (id: string, data: any) => {
+    procedureLogger.with({ id }).info('Update price');
+    return procedureService.updatePrice(id, data);
+  },
 
-  deletePrice: (id: string) =>
-    procedureLogger.with({ id }).info('Delete price') ||
-    procedureService.deletePrice(id),
+  deletePrice: async (id: string) => {
+    procedureLogger.with({ id }).info('Delete price');
+    return procedureService.deletePrice(id);
+  },
 
-  bulkUpdatePrices: (procedureIds: string[], percentageChange: number) =>
-    procedureLogger.with({ count: procedureIds.length }).info('Bulk price update') ||
-    procedureService.bulkUpdatePrices({ procedureIds, percentageChange }),
+  bulkUpdatePrices: async (procedureIds: string[], percentageChange: number) => {
+    procedureLogger.with({ count: procedureIds.length }).info('Bulk price update');
+    return procedureService.bulkUpdatePrices({ procedureIds, percentageChange });
+  },
 
-  getPriceStats: (templateId: string, params?: any) =>
-    procedureLogger.with({ templateId }).debug('Get price stats') ||
-    procedureService.getPriceStats(templateId, params),
+  getPriceStats: async (templateId: string, params?: any) => {
+    procedureLogger.with({ templateId }).debug('Get price stats');
+    return procedureService.getPriceStats(templateId, params);
+  },
 };
 
+// ─── SEARCH ────────────────────────────────────────────────────
 export const searchApi = {
-  searchProcedures: (params: any) =>
-    searchLogger.with(params).info('Search procedures') ||
-    apiClient.get('/search/procedures', { params }),
+  // In searchApi.js or similar file
+  searchProcedures: async (params: any) => {
+    const { results } = await apiClient.get<SearchResponse>(
+      '/search/procedures',
+      { params }
+    );
+    return results ?? [];          // <- return the array only
+  },
 
-  getStats: (templateId: string, params?: any) =>
-    searchLogger.with({ templateId }).debug('Get search stats') ||
-    apiClient.get(`/search/stats/${templateId}`, { params }),
+  getStats: async (templateId: string, params?: any) => {
+    searchLogger.with({ templateId }).debug('Get search stats');
+    return apiClient.get(`/search/stats/${templateId}`, { params });
+  },
 
-  searchProviders: (params: any) =>
-    searchLogger.with(params).info('Search providers') ||
-    apiClient.get('/search/providers', { params }),
+  searchProviders: async (params: any) => {
+    searchLogger.with(params).info('Search providers');
+    return apiClient.get('/search/providers', { params });
+  },
 
-  getRecentSearches: (...args: any[]) =>
-    searchLogger.debug('Get recent searches') || searchService?.getRecentSearches(...args),
+  getRecentSearches: (...args: any[]) => {
+    searchLogger.debug('Get recent searches');
+    return searchService?.getRecentSearches(...args);
+  },
 
-  saveSearch: (searchData: any, ...args: any[]) =>
-    searchLogger.with(searchData).info('Save search') || searchService?.saveSearch(searchData, ...args),
+  saveSearch: (searchData: any, ...args: any[]) => {
+    searchLogger.with(searchData).info('Save search');
+    return searchService?.saveSearch(searchData, ...args);
+  },
 };
 
+// ─── NOTIFICATIONS ─────────────────────────────────────────────
 export const notificationsApi = {
-  getAll: (...args: any[]) => notificationLogger.debug('Get all') || notificationService?.getAll(...args),
+  getAll: async (...args: any[]) => {
+    notificationLogger.debug('Get all');
+    return notificationService?.getAll(...args);
+  },
 
-  getUnread: (...args: any[]) => notificationLogger.debug('Get unread') || notificationService?.getUnread(...args),
+  getUnread: async (...args: any[]) => {
+    notificationLogger.debug('Get unread');
+    return notificationService?.getUnread(...args);
+  },
 
-  markAsRead: (id: string, ...args: any[]) =>
-    notificationLogger.with({ id }).info('Mark as read') || notificationService?.markAsRead(id, ...args),
+  markAsRead: async (id: string, ...args: any[]) => {
+    notificationLogger.with({ id }).info('Mark as read');
+    return notificationService?.markAsRead(id, ...args);
+  },
 
-  markAllAsRead: (...args: any[]) =>
-    notificationLogger.info('Mark all as read') || notificationService?.markAllAsRead(...args),
+  markAllAsRead: async (...args: any[]) => {
+    notificationLogger.info('Mark all as read');
+    return notificationService?.markAllAsRead(...args);
+  },
 
-  delete: (id: string, ...args: any[]) =>
-    notificationLogger.with({ id }).info('Delete') || notificationService?.delete(id, ...args),
+  delete: async (id: string, ...args: any[]) => {
+    notificationLogger.with({ id }).info('Delete');
+    return notificationService?.delete(id, ...args);
+  },
 };
 
+// ─── API EXPORT ────────────────────────────────────────────────
 export const api = {
   auth: authApi,
   locations: locationsApi,
@@ -144,3 +208,4 @@ export const api = {
 };
 
 export default api;
+

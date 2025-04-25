@@ -70,27 +70,33 @@ export default function SearchPage() {
     
     const performSearch = async () => {
       setLoading(true);
-      
+      const requestId = `REQ-${Date.now()}`;
+      console.log(`[${requestId}] 🔍 Starting search`, { query, location, categoryId, distance, sort, page });
+
       try {
-        // Build query parameters
         const params = {
-          query: query,
-          location: location,
-          categoryId: categoryId,
-          distance: distance,
-          sort: sort,
+          query,
+          location,
+          categoryId,
+          distance,
+          sort,
           page: page.toString(),
-          limit: '20'
+          limit: '20',
+          requestId // 👈 Pass to backend
         };
-        
-        // Perform search
+
         const response = await searchApi.searchProcedures(params);
-        
+
+        console.log(`[${requestId}] ✅ Search results received`, {
+          count: response.results?.length ?? 0,
+          page: response.pagination?.page
+        });
+
         setResults(response.results);
         setPagination(response.pagination);
         setError(null);
       } catch (err) {
-        console.error('Search error:', err);
+        console.error(`[${requestId}] ❌ Search error`, err);
         setError('An error occurred while searching. Please try again.');
         setResults([]);
       } finally {

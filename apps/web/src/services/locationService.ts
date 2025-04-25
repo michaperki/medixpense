@@ -73,13 +73,15 @@ const locationService = {
     
     try {
       const result = await apiClient.get(`/locations/${id}`);
-      const location = result.location || result;
-      
-      locationLogger.debug('Location fetched successfully', { 
-        id, 
-        name: location.name
-      });
-      
+      locationLogger.debug('Raw response from API', { result }); // <-- Add this
+      const location = result?.location ?? result;
+
+      if (!location?.id) {
+        locationLogger.error('Invalid location response', { result }); // <-- Make sure this is here
+        throw new Error('Invalid location response');
+      }
+
+      locationLogger.debug('Location fetched successfully', { id, name: location.name });
       return location;
     } catch (error) {
       locationLogger.error(`Failed to fetch location`, { id, error });

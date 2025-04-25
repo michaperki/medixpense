@@ -5,43 +5,20 @@ import { useParams, useRouter } from 'next/navigation';
 import { locationsApi, proceduresApi, searchApi } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { getLogger, LogContext } from '@/lib/logger';
+import { extractError } from '@/lib/api/error';
 import { MagnifyingGlassIcon, CheckIcon, ChartBarIcon } from '@heroicons/react/24/outline';
 
-// Create a page-specific logger
 const addProcedureLogger = getLogger(LogContext.RENDER);
 
-type Location = {
-  id: string;
-  name: string;
-  address1: string;
-  city: string;
-  state: string;
-  zipCode: string;
-};
-
-type ProcedureTemplate = {
-  id: string;
-  name: string;
-  description: string;
-  category: {
-    id: string;
-    name: string;
-  };
-};
-
-type PriceStats = {
-  min: number;
-  max: number;
-  average: number;
-  median: number;
-};
+type Location = { id: string; name: string; address1: string; city: string; state: string; zipCode: string; };
+type ProcedureTemplate = { id: string; name: string; description: string; category: { id: string; name: string; }; };
+type PriceStats = { min: number; max: number; average: number; median: number; };
 
 export default function AddProcedurePage() {
   const { locationId } = useParams() as { locationId: string };
   const router = useRouter();
   const { showToast } = useToast();
 
-  // State
   const [location, setLocation] = useState<Location | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -57,79 +34,60 @@ export default function AddProcedurePage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Log page initialization
   useEffect(() => {
-    addProcedureLogger.info('Add procedure page initialized', {
+    addProcedureLogger.debug('Add procedure page initialized', {
       locationId,
       path: window.location.pathname
     });
-    
+
     return () => {
       addProcedureLogger.debug('Add procedure page unmounted');
     };
   }, [locationId]);
 
-  // Fetch location & categories on mount
   useEffect(() => {
     async function fetchInitialData() {
-      addProcedureLogger.info('Fetching initial data', { locationId });
-      
+      addProcedureLogger.debug('Fetching initial data', { locationId });
+
       try {
         setLoading(true);
 
-        // 1) Location
-        const locationResponse = await addProcedureLogger.time('Fetch location details', async () => {
-          return locationsApi.getById(locationId);
-        });
-        
-        const locationData = locationResponse.location || locationResponse;
-        
-        if (!locationData) {
-          const errorMsg = 'Location data not found';
-          addProcedureLogger.warn('Location data not found', { locationId });
-          throw new Error(errorMsg);
-        }
-        
-        addProcedureLogger.debug('Location data fetched', { 
-          locationName: locationData.name,
-          locationCity: locationData.city,
-          locationState: locationData.state
-        });
-        
-        setLocation(locationData);
+        await addProcedureLogger.group('Initial Data Fetch', async () => {
+          const locationData = await addProcedureLogger.timer('Fetch location details', () =>
+            locationsApi.getById(locationId)
+          );
+          setLocation(locationData);
 
-        // 2) Categories
-        const categoriesResponse = await addProcedureLogger.time('Fetch procedure categories', async () => {
-          return proceduresApi.getCategories();
+          const categoriesResponse = await addProcedureLogger.timer('Fetch procedure categories', () =>
+            proceduresApi.getCategories()
+          );
+
+          const categoriesData = categoriesResponse.categories || [];
+          addProcedureLogger.debug('Categories fetched', { count: categoriesData.length });
+          setCategories(categoriesData);
         });
-        
-        const categoriesData = categoriesResponse.categories || [];
-        
-        addProcedureLogger.debug('Categories fetched', { 
-          count: categoriesData.length 
-        });
-        
-        setCategories(categoriesData);
+
         setError(null);
-      } catch (err) {
-        addProcedureLogger.error('Failed to fetch initial data', err);
+      } catch (err: any) {
+        addProcedureLogger.error('Failed to fetch initial data', extractError(err));
         setError('Failed to load data. Please try again later.');
       } finally {
         setLoading(false);
       }
     }
-    
+
     fetchInitialData();
   }, [locationId]);
 
-  // Search templates when term or category changes
   useEffect(() => {
+    const cleanedSearchTerm = searchTerm.trim();
+
     addProcedureLogger.debug('Search criteria changed', {
-      searchTerm: searchTerm || '(empty)',
+      searchTerm: cleanedSearchTerm || '(empty)',
       selectedCategory: selectedCategory || '(none)'
     });
-    
-    if (!searchTerm && !selectedCategory) {
+
+    if (!cleanedSearchTerm && !selectedCategory) {
       addProcedureLogger.debug('Clearing templates - no search criteria');
       setTemplates([]);
       setFilteredTemplates([]);
@@ -139,30 +97,30 @@ export default function AddProcedurePage() {
     const handler = setTimeout(async () => {
       try {
         setSearchLoading(true);
-        addProcedureLogger.debug('Searching templates', {
-          searchTerm,
-          categoryId: selectedCategory
-        });
+        addProcedureLogger.debug('Searching templates', { searchTerm: cleanedSearchTerm, categoryId: selectedCategory });
 
         const params: Record<string, any> = {};
-        if (searchTerm) params.query = searchTerm;
+        if (cleanedSearchTerm) params.query = cleanedSearchTerm;
         if (selectedCategory) params.categoryId = selectedCategory;
 
-        const templatesResponse = await addProcedureLogger.time('Search procedure templates', async () => {
-          return proceduresApi.getTemplates(params);
-        });
-        
-        const templatesData = templatesResponse.templates || [];
-        
-        addProcedureLogger.debug('Template search results', { 
+        const templatesResponse = await addProcedureLogger.timer('Search procedure templates', () =>
+          searchApi.searchProcedures(params)
+        );
+
+        const templatesData = templatesResponse || [];  // fallback to empty array
+        addProcedureLogger.debug('Raw templatesData from API', templatesData);
+
+        addProcedureLogger.debug('Template search results', {
           count: templatesData.length,
           hasResults: templatesData.length > 0
         });
-        
-        setTemplates(templatesData);
-        setFilteredTemplates(templatesData);
+
+        const filtered = templatesData.filter(tpl => tpl.category && tpl.category.name);
+
+        setTemplates(filtered);
+        setFilteredTemplates(filtered);
       } catch (err) {
-        addProcedureLogger.error('Template search failed', err);
+        addProcedureLogger.error('Template search failed', extractError(err));
       } finally {
         setSearchLoading(false);
       }
@@ -171,41 +129,38 @@ export default function AddProcedurePage() {
     return () => clearTimeout(handler);
   }, [searchTerm, selectedCategory]);
 
-  // Fetch price stats when template selected
   useEffect(() => {
     if (!selectedTemplate) return;
 
     async function fetchStats() {
-      addProcedureLogger.info('Fetching price stats', { 
+      addProcedureLogger.info('Fetching price stats', {
         templateId: selectedTemplate.id,
         templateName: selectedTemplate.name
       });
-      
+
       try {
         setStatsLoading(true);
 
-        const statsResponse = await addProcedureLogger.time('Fetch price statistics', async () => {
-          return searchApi.getStats(selectedTemplate.id, {
+        const statsResponse = await addProcedureLogger.timer('Fetch price statistics', () =>
+          searchApi.getStats(selectedTemplate.id, {
             locationId,
-            radius: 50,
-          });
-        });
-        
+            radius: 50
+          })
+        );
+
         const statsData = statsResponse.stats;
-        
+
         if (statsData) {
-          addProcedureLogger.debug('Price stats received', { 
+          addProcedureLogger.debug('Price stats received', {
             min: statsData.min,
             max: statsData.max,
             avg: statsData.average,
             median: statsData.median
           });
-          
+
           setPriceStats(statsData);
           if (statsData.average) {
-            addProcedureLogger.debug('Setting default price to average', { 
-              price: statsData.average 
-            });
+            addProcedureLogger.debug('Setting default price to average', { price: statsData.average });
             setPrice(statsData.average);
           }
         } else {
@@ -213,42 +168,34 @@ export default function AddProcedurePage() {
           setPriceStats(null);
         }
       } catch (err) {
-        addProcedureLogger.error('Failed to fetch price stats', err);
+        addProcedureLogger.error('Failed to fetch price stats', extractError(err));
         setPriceStats(null);
       } finally {
         setStatsLoading(false);
       }
     }
-    
+
     fetchStats();
   }, [selectedTemplate, locationId]);
 
-  // Handlers
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTerm = e.target.value;
-    addProcedureLogger.debug('Search term changed', { 
-      oldTerm: searchTerm, 
-      newTerm 
-    });
+    addProcedureLogger.debug('Search term changed', { oldTerm: searchTerm, newTerm });
     setSearchTerm(newTerm);
   };
 
   const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newCategory = e.target.value;
-    addProcedureLogger.debug('Category selection changed', { 
-      oldCategory: selectedCategory, 
-      newCategory 
-    });
+    addProcedureLogger.debug('Category selection changed', { oldCategory: selectedCategory, newCategory });
     setSelectedCategory(newCategory);
   };
 
   const handleSelectTemplate = (tpl: ProcedureTemplate) => {
-    addProcedureLogger.info('Template selected', { 
+    addProcedureLogger.info('Template selected', {
       templateId: tpl.id,
       templateName: tpl.name,
       categoryName: tpl.category.name
     });
-    
     setSelectedTemplate(tpl);
     setPriceStats(null);
     setPrice(0);
@@ -257,24 +204,24 @@ export default function AddProcedurePage() {
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = parseFloat(e.target.value);
     const newPrice = isNaN(v) ? 0 : v;
-    
-    addProcedureLogger.debug('Price changed', { 
-      oldPrice: price, 
-      newPrice 
-    });
-    
+    addProcedureLogger.debug('Price changed', { oldPrice: price, newPrice });
     setPrice(newPrice);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    addProcedureLogger.debug('Final form submission state', {
+      selectedTemplate,
+      price,
+      isSubmitting
+    });
+
     if (!selectedTemplate || price <= 0) {
       addProcedureLogger.warn('Invalid form submission attempt', {
         hasTemplate: !!selectedTemplate,
         price
       });
-      
       showToast('Please select a procedure and enter a valid price', 'error');
       return;
     }
@@ -285,37 +232,34 @@ export default function AddProcedurePage() {
       templateName: selectedTemplate.name,
       price
     });
-    
+
     try {
       setIsSubmitting(true);
-      
-      await addProcedureLogger.time('Add procedure price', async () => {
-        return proceduresApi.addPrice({
+      await addProcedureLogger.timer('Add procedure price', () =>
+        proceduresApi.addPrice({
           locationId,
           templateId: selectedTemplate.id,
-          price,
-        });
-      });
-      
+          price
+        })
+      );
+
       addProcedureLogger.info('Procedure price added successfully', {
         templateId: selectedTemplate.id,
         templateName: selectedTemplate.name,
         price
       });
-      
+
       showToast('Procedure price added successfully', 'success');
-      
       addProcedureLogger.debug('Navigating to procedures list');
       router.push(`/provider/locations/${locationId}/procedures`);
     } catch (err) {
-      addProcedureLogger.error('Failed to add procedure price', err);
+      addProcedureLogger.error('Failed to add procedure price', extractError(err));
       showToast('Failed to add procedure price', 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Log component rendering state
   useEffect(() => {
     if (!loading) {
       addProcedureLogger.debug('Add procedure page render state', {
@@ -332,17 +276,7 @@ export default function AddProcedurePage() {
         currentPrice: price
       });
     }
-  }, [
-    loading, 
-    error, 
-    location, 
-    categories.length,
-    templates.length,
-    filteredTemplates.length,
-    selectedTemplate,
-    priceStats,
-    price
-  ]);
+  }, [loading, error, location, categories.length, templates.length, filteredTemplates.length, selectedTemplate, priceStats, price]);
 
   if (loading) {
     return (
@@ -419,6 +353,7 @@ export default function AddProcedurePage() {
                         id="search"
                         value={searchTerm}
                         onChange={handleSearchChange}
+                        style={{ paddingLeft: '2rem' }}
                         className="block w-full pl-10 pr-3 py-2 border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                         placeholder="e.g. MRI, X-ray"
                       />

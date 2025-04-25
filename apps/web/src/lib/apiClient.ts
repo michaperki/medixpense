@@ -56,6 +56,10 @@ class ApiClient {
       }
 
       apiLogger.info(`▶️ ${reqId} ${config.method?.toUpperCase()} ${config.url}`);
+
+      if (config.params?.requestId) {
+        config.headers['x-request-id'] = config.params.requestId;
+      }
       return config;
     });
 

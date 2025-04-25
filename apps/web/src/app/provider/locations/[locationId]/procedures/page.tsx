@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { locationsApi, proceduresApi } from '@/lib/api';
+import { locationsApi, proceduresApi, searchApi } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { getLogger, LogContext } from '@/lib/logger';
 import { 
@@ -90,39 +90,37 @@ export default function ProceduresPage() {
   
   const fetchLocationAndProcedures = async () => {
     locationProceduresLogger.info('Fetching location and procedures data', { locationId });
-    
+
+    let locationData: Location | null = null;
+    let proceduresData: Procedure[] = [];
+
     try {
       setLoading(true);
-      
-      // Fetch location details with performance tracking
-      const locationData = await locationsApi.getById(locationId);
+
+      locationData = await locationsApi.getById(locationId);
       locationProceduresLogger.debug('Fetched location', { locationData });
       setLocation(locationData);
-      
-      
+
       if (!locationData) {
         const errorMsg = 'Location data not found';
         locationProceduresLogger.warn('Location data not found', { locationId });
         throw new Error(errorMsg);
       }
-      
+
       locationProceduresLogger.debug('Location data fetched', { 
         locationName: locationData.name,
         locationCity: locationData.city,
         locationState: locationData.state
       });
-      
+
       setLocation(locationData);
       locationProceduresLogger.debug('Location set in state', { location: locationData });
 
-      // Try to fetch procedures, but don't let it break the page if it fails
       try {
-        // Track procedure fetch performance
         locationProceduresLogger.debug('Calling getProviderProcedures()', { locationId });
         const proceduresResponse = await proceduresApi.getProviderProcedures({ locationId });
-        
-        // Handle different response structures for procedures
-        const proceduresData = Array.isArray(proceduresResponse)
+
+        proceduresData = Array.isArray(proceduresResponse)
           ? proceduresResponse
           : proceduresResponse?.procedures ?? proceduresResponse?.data?.procedures ?? [];
 
@@ -131,51 +129,46 @@ export default function ProceduresPage() {
           setProcedures([]);
           return;
         }
-        
+
         locationProceduresLogger.debug('Procedures data fetched', {
           count: proceduresData.length,
           hasProcedures: proceduresData.length > 0,
-          responseFormat: proceduresResponse?.procedures ? 'direct' : 
-                         (proceduresResponse?.data ? 'nested' : 'unknown')
+          responseFormat: proceduresResponse?.procedures ? 'direct' :
+                        (proceduresResponse?.data ? 'nested' : 'unknown')
         });
-        
+
         setProcedures(proceduresData);
-        
-        // Only extract categories if we have procedure data
+
         if (proceduresData.length > 0) {
-          locationProceduresLogger.debug('Extracting unique categories');
-          
           const uniqueCategories = [...new Set(
             proceduresData
               .filter(p => p.template && p.template.category)
               .map((p) => p.template.category)
               .map(category => JSON.stringify(category))
           )].map(str => JSON.parse(str));
-          
+
           locationProceduresLogger.debug('Categories extracted', { 
             categoryCount: uniqueCategories.length 
           });
-          
+
           setCategories(uniqueCategories);
         } else {
           locationProceduresLogger.debug('No procedures found for location');
         }
       } catch (procedureErr) {
         locationProceduresLogger.error('Failed to fetch procedures', procedureErr);
-        // We don't set the main error state here, as we still want to show the location
-        // Just set empty procedures
         setProcedures([]);
       }
-      
+
       setError(null);
     } catch (err) {
       locationProceduresLogger.error('Failed to fetch location data', err);
       setError('Failed to load location data. Please try again later.');
     } finally {
       setLoading(false);
-      locationProceduresLogger.debug('Data fetching completed', { 
-        hasLocation: !!location,
-        procedureCount: procedures.length,
+      locationProceduresLogger.debug('Data fetching completed', {
+        hasLocation: !!locationData,
+        procedureCount: proceduresData?.length ?? 0,
         hasError: !!error
       });
     }
@@ -209,6 +202,43 @@ export default function ProceduresPage() {
       });
     }
   };
+
+  // whenever searchTerm or selectedCategory changes, re‐query the server
+  useEffect(() => {
+    const q = searchTerm.trim();
+    // if both empty, don’t override your “already added” list
+    if (!q && !selectedCategory) return;
+
+    let cancelled = false;
+    (async () => {
+      locationProceduresLogger.debug('Searching procedures on server', {
+        query: q || undefined,
+        category: selectedCategory || undefined,
+        locationId
+      });
+      setLoading(true);
+      try {
+        const params: any = { locationId };
+        if (q)               params.query      = q;
+        if (selectedCategory) params.categoryId = selectedCategory;
+        // searchApi returns an array of templates ({ id,name,description,category })
+        const raw = await searchApi.searchProcedures(params);
+        // wrap each template in your Procedure shape (with a placeholder price)
+        const normalized = raw.map(tpl => ({
+          id: tpl.id,
+          price: 0,            // or whatever default makes sense
+          template: tpl
+        }));
+        if (!cancelled) setProcedures(normalized);
+      } catch (err) {
+        locationProceduresLogger.error('Server search failed', err);
+        if (!cancelled) setProcedures([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [searchTerm, selectedCategory, locationId]);
   
   // Log when filter criteria change
   useEffect(() => {
@@ -223,42 +253,24 @@ export default function ProceduresPage() {
   }, [searchTerm, selectedCategory, sortField, sortDirection, loading]);
   
   // Get sorted and filtered procedures
-  const filteredAndSortedProcedures = procedures
-    .filter(procedure => {
-      // Filter by search term
-      const matchesSearch = searchTerm === '' || 
-        procedure.template.name.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      // Filter by category
-      const matchesCategory = selectedCategory === '' || 
-        procedure.template.category.id === selectedCategory;
-        
-      return matchesSearch && matchesCategory;
-    })
-    .sort((a, b) => {
-      const multiplier = sortDirection === 'asc' ? 1 : -1;
-      
-      if (sortField === 'name') {
-        return multiplier * a.template.name.localeCompare(b.template.name);
-      } else if (sortField === 'price') {
-        return multiplier * (a.price - b.price);
-      } else if (sortField === 'category') {
-        return multiplier * a.template.category.name.localeCompare(b.template.category.name);
-      }
-      
-      return 0;
-    });
+  // The server already applied text + category filters.
+  const sortedProcedures = [...procedures].sort((a, b) => {
+    const m = sortDirection === 'asc' ? 1 : -1;
+    if (sortField === 'name') return m * (a.template?.name || '').localeCompare(b.template?.name || '');
+    if (sortField === 'price') return m * (a.price - b.price);
+    return m * ((a.template?.category?.name || '').localeCompare(b.template?.category?.name || ''));
+  });
   
   // Log any filtering results
   useEffect(() => {
     if (!loading && procedures.length > 0) {
       locationProceduresLogger.debug('Filtered procedures result', {
         totalProcedures: procedures.length,
-        filteredCount: filteredAndSortedProcedures.length,
-        isFiltered: filteredAndSortedProcedures.length !== procedures.length
+        filteredCount: sortedProcedures.length,
+        isFiltered: sortedProcedures.length !== procedures.length
       });
     }
-  }, [filteredAndSortedProcedures.length, procedures.length, loading]);
+  }, [sortedProcedures.length, procedures.length, loading]);
   
   // Handle procedure deletion
   const handleDeleteClick = (procedure: Procedure) => {
@@ -341,11 +353,11 @@ export default function ProceduresPage() {
   };
   
   const handleSelectAll = () => {
-    const allSelected = selectedProcedures.length === filteredAndSortedProcedures.length;
+    const allSelected = selectedProcedures.length === sortedProcedures.length;
     
     locationProceduresLogger.debug('Toggle select all procedures', { 
       currentlySelected: selectedProcedures.length,
-      total: filteredAndSortedProcedures.length,
+      total: sortedProcedures.length,
       allSelected,
       action: allSelected ? 'deselect-all' : 'select-all'
     });
@@ -355,7 +367,7 @@ export default function ProceduresPage() {
       setSelectedProcedures([]);
     } else {
       // Select all filtered procedures
-      setSelectedProcedures(filteredAndSortedProcedures.map(p => p.id));
+      setSelectedProcedures(sortedProcedures.map(p => p.id));
     }
   };
   
@@ -449,7 +461,7 @@ export default function ProceduresPage() {
         hasLocation: !!location,
         locationName: location?.name,
         procedureCount: procedures.length,
-        filteredCount: filteredAndSortedProcedures.length,
+        filteredCount: sortedProcedures.length,
         categoryCount: categories.length,
         bulkEditMode,
         selectedProceduresCount: selectedProcedures.length
@@ -460,7 +472,7 @@ export default function ProceduresPage() {
     error, 
     location, 
     procedures.length, 
-    filteredAndSortedProcedures.length, 
+    sortedProcedures.length, 
     categories.length,
     bulkEditMode,
     selectedProcedures.length
@@ -632,7 +644,7 @@ export default function ProceduresPage() {
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           <input
                             type="checkbox"
-                            checked={selectedProcedures.length === filteredAndSortedProcedures.length && filteredAndSortedProcedures.length > 0}
+                            checked={selectedProcedures.length === sortedProcedures.length && sortedProcedures.length > 0}
                             onChange={handleSelectAll}
                             className="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded"
                           />
@@ -698,7 +710,7 @@ export default function ProceduresPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredAndSortedProcedures.map((procedure) => (
+                    {sortedProcedures.map((procedure) => (
                       <tr key={procedure.id}>
                         {bulkEditMode && (
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -717,7 +729,7 @@ export default function ProceduresPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                            {procedure.template.category.name}
+                            {procedure.template?.category?.name ?? '—'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-900 text-right text-sm font-medium">
