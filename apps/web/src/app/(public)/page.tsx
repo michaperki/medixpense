@@ -1,8 +1,40 @@
-// src/app/(public)/page.tsx
+// src/app/(public)/page.tsx – instrumented with logger v2
+
+'use client';
 import Link from 'next/link';
-import Image from 'next/image';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { getLogger, LogContext } from '@/lib/logger';
+
+const renderLogger = getLogger(LogContext.RENDER);
+const uiLogger = getLogger('UI');
 
 export default function HomePage() {
+  const router = useRouter();
+  const [procedure, setProcedure] = useState('');
+  const [location, setLocation] = useState('');
+
+  // log initial mount
+  useEffect(() => {
+    renderLogger.info('HomePage mounted');
+    return () => renderLogger.info('HomePage unmounted');
+  }, []);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Build URL with search parameters
+    const params = new URLSearchParams();
+    if (procedure) params.set('query', procedure);
+    if (location) params.set('location', location);
+    params.set('page', '1');
+
+    uiLogger.info('Search submit', { procedure, location });
+
+    // Navigate to search page with parameters
+    router.push(`/search?${params.toString()}`);
+  };
+
   return (
     <>
       {/* Hero Section */}
@@ -12,60 +44,65 @@ export default function HomePage() {
             <h1 className="text-white text-4xl font-extrabold sm:text-5xl md:text-6xl">
               Find Healthcare Prices Near You
             </h1>
-            <p className="mt-3 mx-auto text-base sm:text-lg md:mt-5 md:text-xl" style={{ color: 'var(--color-primary-100)' }}>
+            <p
+              className="mt-3 mx-auto text-base sm:text-lg md:mt-5 md:text-xl"
+              style={{ color: 'var(--color-primary-100)' }}
+            >
               Compare medical procedure costs across providers in your area and make informed healthcare decisions.
             </p>
             <div className="mt-8 sm:flex sm:justify-center">
               <div className="search-box">
-                <div className="flex flex-col sm:flex-row gap-4">
+                <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-4">
                   <div>
-                    <label htmlFor="procedure" className="block text-sm font-medium text-gray-700 text-left">Procedure</label>
+                    <label
+                      htmlFor="procedure"
+                      className="block text-sm font-medium text-gray-700 text-left"
+                    >
+                      Procedure
+                    </label>
                     <div className="mt-1">
                       <select
                         id="procedure"
                         name="procedure"
-                        defaultValue=""
+                        value={procedure}
+                        onChange={(e) => setProcedure(e.target.value)}
                         className="form-select"
                       >
                         <option value="" disabled>
                           Select a procedure
                         </option>
-                        <option value="MRI Brain without contrast">
-                          MRI Brain without contrast
-                        </option>
-                        <option value="Colonoscopy screening">
-                          Colonoscopy screening
-                        </option>
-                        <option value="CT Scan - Chest">
-                          CT Scan - Chest
-                        </option>
-                        <option value="Physical Therapy - Initial evaluation">
-                          Physical Therapy - Initial evaluation
-                        </option>
+                        <option value="MRI Brain without contrast">MRI Brain without contrast</option>
+                        <option value="Colonoscopy screening">Colonoscopy screening</option>
+                        <option value="CT Scan - Chest">CT Scan - Chest</option>
+                        <option value="Physical Therapy - Initial evaluation">Physical Therapy - Initial evaluation</option>
                       </select>
                     </div>
                   </div>
                   <div>
-                    <label htmlFor="location" className="block text-sm font-medium text-gray-700 text-left">Location</label>
+                    <label
+                      htmlFor="location"
+                      className="block text-sm font-medium text-gray-700 text-left"
+                    >
+                      Location
+                    </label>
                     <div className="mt-1">
                       <input
                         type="text"
                         name="location"
                         id="location"
+                        value={location}
+                        onChange={(e) => setLocation(e.target.value)}
                         placeholder="City, State or ZIP"
                         className="form-input"
                       />
                     </div>
                   </div>
                   <div className="flex items-end">
-                    <Link
-                      href="/search"
-                      className="btn btn-primary"
-                    >
+                    <button type="submit" className="btn btn-primary">
                       Search
-                    </Link>
+                    </button>
                   </div>
-                </div>
+                </form>
               </div>
             </div>
           </div>

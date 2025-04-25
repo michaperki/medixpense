@@ -1,0 +1,15 @@
+
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "declaration": true,
+    "outDir": "./dist",
+    "rootDir": "./",
+    "moduleResolution": "Node",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["core.ts", "node.ts", "browser.ts", "index.ts"]
+}

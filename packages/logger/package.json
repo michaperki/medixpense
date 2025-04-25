@@ -1,0 +1,29 @@
+
+{
+  "name": "@medixpense/logger",
+  "version": "1.0.0",
+  "main": "./dist/core.js",
+  "types": "./dist/core.d.ts",
+  "exports": {
+    "import": {
+      "browser": "./dist/browser.js",
+      "node": "./dist/node.js",
+      "default": "./dist/core.js"
+    },
+    "require": {
+      "default": "./dist/node.cjs"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "pino": "^8.14.2",
+    "pino-pretty": "^10.3.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
+

@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -8,20 +9,22 @@ import {
   ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import apiClient, { ApiError } from "@/lib/apiClient";
 import axios from "axios";
+import apiClient from "@/lib/apiClient";
 import { authLogger } from "@/lib/logger";
 import type {
   User,
-  LoginRequest,
   RegisterRequest,
   UpdateProfileRequest,
   ChangePasswordRequest,
-  AuthResponse
 } from "@/services";
 
-// Add a type for provider
-type Provider = {
+/* ------------------------------------------------------------------
+ * Types
+ * ----------------------------------------------------------------*/
+
+// Provider details attached to a user
+export type Provider = {
   id: string;
   userId: string;
   organizationName: string;
@@ -36,12 +39,9 @@ type Provider = {
   updatedAt: string;
 };
 
-// Extend User type to include provider property
-type UserWithProvider = User & {
-  provider?: Provider;
-};
+export type UserWithProvider = User & { provider?: Provider };
 
-type AuthContextType = {
+export type AuthContextType = {
   user: UserWithProvider | null;
   token: string | null;
   loading: boolean;
@@ -58,6 +58,19 @@ type AuthContextType = {
   clearError: () => void;
 };
 
+/* ------------------------------------------------------------------
+ * Helpers
+ * ----------------------------------------------------------------*/
+
+const newReqId = () => Math.random().toString(36).slice(2, 5).toUpperCase();
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
+
+/* ------------------------------------------------------------------
+ * Context setup
+ * ----------------------------------------------------------------*/
+
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -67,168 +80,107 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  // Define the API base URL explicitly - IMPORTANT: ensure it has /api in the path
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
-
-  // Hydrate from localStorage
+  /* --------------------------------------------------------------
+   * Session hydration
+   * ------------------------------------------------------------*/
   useEffect(() => {
-    const checkAuth = async () => {
-      const storedToken = localStorage.getItem("authToken");
-      const u = localStorage.getItem("user");
-      
-      if (storedToken && u) {
-        authLogger.debug("Restoring session from localStorage");
-        setToken(storedToken);
-        
-        // Set the authorization header for apiClient
-        if (apiClient.client?.defaults?.headers) {
-          apiClient.client.defaults.headers.common["Authorization"] =
-            "Bearer " + storedToken;
-          authLogger.debug("Set authorization header for client");
-        }
-        
-        try {
-          const userData = JSON.parse(u);
-          setUser(userData);
-          authLogger.info("User session restored", { userId: userData.id, role: userData.role });
+    const timer = authLogger.timer("BOOT – restore session");
+    const storedToken = localStorage.getItem("authToken");
+    const storedUser = localStorage.getItem("user");
 
-          // Check if user is a provider but doesn't have provider data
-          if (userData.role === 'PROVIDER' && !userData.provider) {
-            // Fetch provider data
-            fetchProviderData(userData.id);
-          }
-        } catch (parseError) {
-          authLogger.error("Failed to parse user data from localStorage", parseError);
-          // Clear invalid data
-          localStorage.removeItem("authToken");
-          localStorage.removeItem("user");
+    if (storedToken && storedUser) {
+      try {
+        const parsed: UserWithProvider = JSON.parse(storedUser);
+        setToken(storedToken);
+        setUser(parsed);
+        apiClient.client?.defaults?.headers &&
+          (apiClient.client.defaults.headers.common["Authorization"] =
+            `Bearer ${storedToken}`);
+        authLogger.info("Session restored", {
+          userId: parsed.id,
+          role: parsed.role,
+        });
+
+        // background fetch for missing provider data
+        if (parsed.role === "PROVIDER" && !parsed.provider) {
+          void fetchProviderData(parsed.id, storedToken);
         }
-      } else {
-        authLogger.debug("No stored auth session found");
+      } catch (err) {
+        authLogger.error("Invalid session cache", err);
+        localStorage.removeItem("authToken");
+        localStorage.removeItem("user");
       }
-      setLoading(false);
-    };
-    
-    checkAuth();
+    } else {
+      authLogger.debug("No stored auth session found");
+    }
+    timer.done();
+    setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Function to fetch provider data
-  const fetchProviderData = async (userId: string) => {
+  /* --------------------------------------------------------------
+   * API helpers
+   * ------------------------------------------------------------*/
+
+  const fetchProviderData = async (userId: string, authTok?: string) => {
+    const reqId = newReqId();
+    const t = authLogger.timer(`${reqId} GET /providers/user/${userId}`);
     try {
-      authLogger.debug(`Fetching provider data`, { userId });
-      
-      // Use direct axios to ensure the right URL
-      const response = await axios.get(`${API_BASE_URL}/providers/user/${userId}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`
-        }
+      const { data } = await axios.get(`${API_BASE_URL}/providers/user/${userId}`, {
+        headers: { Authorization: `Bearer ${authTok ?? token}` },
       });
-      
-      if (response.data) {
-        authLogger.info("Provider data fetched successfully", { providerId: response.data.id });
-        
-        // Update user with provider data
-        const updatedUser = { ...user, provider: response.data };
-        setUser(updatedUser);
-        localStorage.setItem("user", JSON.stringify(updatedUser));
-      }
+      setUser((prev) => (prev ? { ...prev, provider: data } : prev));
+      localStorage.setItem("user", JSON.stringify({ ...user, provider: data }));
+      t.done();
     } catch (err) {
-      authLogger.error("Error fetching provider data", err);
-      // Don't set an error - this is a background fetch
+      t.fail(err);
     }
   };
 
   const clearError = () => setError(null);
 
-  const login = async (email: string, password: string) => {
-    setError(null);
-    setLoading(true);
-    
-    authLogger.debug("Login attempt initiated", { email });
+  /* --------------------------------------------------------------
+   * Auth actions
+   * ------------------------------------------------------------*/
 
-    // Validate inputs before making the API call
+  const login = async (email: string, password: string) => {
+    const reqId = newReqId();
+    const t = authLogger.timer(`${reqId} POST /auth/login`);
+
     if (!email || !password) {
-      const errorMsg = "Email and password are required";
-      setError(errorMsg);
-      setLoading(false);
-      authLogger.warn("Login validation failed", { reason: errorMsg });
-      throw new Error(errorMsg);
+      const msg = "Email and password are required";
+      authLogger.warn("Validation failed", { msg });
+      setError(msg);
+      t.fail(msg);
+      throw new Error(msg);
     }
-    
+
     try {
-      authLogger.debug("Making login API call");
-      
-      // Use direct axios call to ensure correct URL with /api prefix
-      const response = await axios.post(`${API_BASE_URL}/auth/login`, { 
-        email, 
-        password 
-      }, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      const responseData = response.data;
-      
-      if (!responseData || (!responseData.user && !responseData.token)) {
-        throw new Error('Invalid response format from server');
+      const { data } = await axios.post(
+        `${API_BASE_URL}/auth/login`,
+        { email, password },
+        { headers: { "Content-Type": "application/json" } },
+      );
+
+      const { user: u, token: tok } = data;
+      setToken(tok);
+      setUser(u);
+      apiClient.client?.defaults?.headers &&
+        (apiClient.client.defaults.headers.common["Authorization"] =
+          `Bearer ${tok}`);
+      localStorage.setItem("authToken", tok);
+      localStorage.setItem("user", JSON.stringify(u));
+
+      // fetch provider if needed
+      if (u.role === "PROVIDER" && !u.provider) {
+        void fetchProviderData(u.id, tok);
       }
-      
-      const { user, token: newToken } = responseData;
-      
-      // Update token state
-      setToken(newToken);
-      
-      // Set auth header for future requests
-      if (apiClient.client?.defaults?.headers) {
-        apiClient.client.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
-      }
-      
-      authLogger.info("Login successful", { userId: user.id, role: user.role });
-      
-      // If user is a provider, fetch provider data
-      if (user.role === 'PROVIDER') {
-        authLogger.debug("User is a provider, fetching provider data");
-        try {
-          const providerResponse = await axios.get(`${API_BASE_URL}/providers/user/${user.id}`, {
-            headers: {
-              Authorization: `Bearer ${newToken}`
-            }
-          });
-          
-          if (providerResponse.data) {
-            // Add provider data to user
-            user.provider = providerResponse.data;
-            authLogger.debug("Provider data fetched successfully", { providerId: providerResponse.data.id });
-          }
-        } catch (providerErr) {
-          authLogger.warn("Error fetching provider data during login", providerErr);
-          // Continue with login even if provider fetch fails
-        }
-      }
-      
-      setUser(user);
-      localStorage.setItem("authToken", newToken);
-      localStorage.setItem("user", JSON.stringify(user));
-      
-      return user;
+
+      t.done();
+      return u;
     } catch (err: any) {
-      authLogger.error("Login failed", err);
-      
-      // Better error handling for axios errors
-      let errorMessage = "Login failed";
-      if (err.response) {
-        errorMessage = err.response.data?.message || 'Server error';
-      } else if (err.request) {
-        errorMessage = 'No response from server';
-      } else {
-        errorMessage = err.message;
-      }
-      
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setLoading(false);
+      t.fail(err);
+      handleAxiosError(err, "Login failed");
     }
   };
 
@@ -238,231 +190,162 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     localStorage.removeItem("authToken");
     localStorage.removeItem("user");
-    if (apiClient.client?.defaults?.headers?.common) {
+    apiClient.client?.defaults?.headers?.common &&
       delete apiClient.client.defaults.headers.common["Authorization"];
-    }
     router.push("/");
   };
 
   const register = async (data: RegisterRequest) => {
-    setError(null);
-    setLoading(true);
-    
-    authLogger.debug("Registration attempt", { email: data.email, role: data.role });
-    
-    // Validate inputs
+    const reqId = newReqId();
+    const t = authLogger.timer(`${reqId} POST /auth/register`);
+
     if (!data.email || !data.password || !data.firstName || !data.lastName) {
-      const errorMsg = "All required fields must be filled";
-      setError(errorMsg);
-      setLoading(false);
-      authLogger.warn("Registration validation failed", { reason: errorMsg });
-      throw new Error(errorMsg);
+      const msg = "All required fields must be filled";
+      authLogger.warn("Validation failed", { msg });
+      setError(msg);
+      t.fail(msg);
+      throw new Error(msg);
     }
-    
+
     try {
-      // Use direct axios for consistent URL handling
-      const response = await axios.post(`${API_BASE_URL}/auth/register`, data, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      const responseData = response.data;
-      
-      if (!responseData || (!responseData.user && !responseData.token)) {
-        throw new Error('Invalid response format from server');
+      const { data: res } = await axios.post(
+        `${API_BASE_URL}/auth/register`,
+        data,
+        { headers: { "Content-Type": "application/json" } },
+      );
+
+      const { user: u, token: tok } = res;
+      setToken(tok);
+      setUser(u);
+      apiClient.client?.defaults?.headers &&
+        (apiClient.client.defaults.headers.common["Authorization"] =
+          `Bearer ${tok}`);
+      localStorage.setItem("authToken", tok);
+      localStorage.setItem("user", JSON.stringify(u));
+
+      if (u.role === "PROVIDER") {
+        void fetchProviderData(u.id, tok);
       }
-      
-      const { user, token: newToken } = responseData;
-      
-      // Update token state
-      setToken(newToken);
-      
-      // Set auth header for future requests
-      if (apiClient.client?.defaults?.headers) {
-        apiClient.client.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
-      }
-      
-      authLogger.info("Registration successful", { userId: user.id, role: user.role });
-      
-      // If user is a provider, fetch provider data
-      if (user.role === 'PROVIDER') {
-        authLogger.debug("New user is a provider, fetching provider data");
-        try {
-          const providerResponse = await axios.get(`${API_BASE_URL}/providers/user/${user.id}`, {
-            headers: {
-              Authorization: `Bearer ${newToken}`
-            }
-          });
-          
-          if (providerResponse.data) {
-            // Add provider data to user
-            user.provider = providerResponse.data;
-            authLogger.debug("Provider data fetched for new user", { providerId: providerResponse.data.id });
-          }
-        } catch (providerErr) {
-          authLogger.warn("Error fetching provider data during registration", providerErr);
-          // Continue with registration even if provider fetch fails
-        }
-      }
-      
-      setUser(user);
-      localStorage.setItem("authToken", newToken);
-      localStorage.setItem("user", JSON.stringify(user));
-      
-      return user;
-    } catch (err: any) {
-      authLogger.error("Registration failed", err);
-      
-      let errorMessage = "Registration failed";
-      if (err.response) {
-        errorMessage = err.response.data?.message || 'Server error';
-      } else if (err.request) {
-        errorMessage = 'No response from server';
-      } else {
-        errorMessage = err.message;
-      }
-      
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setLoading(false);
+
+      t.done();
+      return u;
+    } catch (err) {
+      t.fail(err);
+      handleAxiosError(err, "Registration failed");
     }
   };
 
   const forgotPassword = async (email: string) => {
-    setError(null);
-    setLoading(true);
-    
-    authLogger.debug("Password reset request initiated", { email });
-    
+    const reqId = newReqId();
+    const t = authLogger.timer(`${reqId} POST /auth/forgot-password`);
     try {
       await axios.post(`${API_BASE_URL}/auth/forgot-password`, { email });
-      authLogger.info("Password reset email sent", { email });
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || "Failed to send reset email";
-      authLogger.error("Password reset request failed", { email, error: errorMessage });
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setLoading(false);
+      t.done();
+    } catch (err) {
+      t.fail(err);
+      handleAxiosError(err, "Failed to send reset email");
     }
   };
 
   const resetPassword = async (resetToken: string, password: string) => {
-    setError(null);
-    setLoading(true);
-    
-    authLogger.debug("Password reset attempt with token");
-    
+    const reqId = newReqId();
+    const t = authLogger.timer(`${reqId} POST /auth/reset-password`);
     try {
-      await axios.post(`${API_BASE_URL}/auth/reset-password`, { token: resetToken, password });
-      authLogger.info("Password reset successful");
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || "Reset failed";
-      authLogger.error("Password reset failed", { error: errorMessage });
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setLoading(false);
+      await axios.post(`${API_BASE_URL}/auth/reset-password`, {
+        token: resetToken,
+        password,
+      });
+      t.done();
+    } catch (err) {
+      t.fail(err);
+      handleAxiosError(err, "Reset password failed");
     }
   };
 
   const changePassword = async (data: ChangePasswordRequest) => {
-    setError(null);
-    setLoading(true);
-    
-    authLogger.debug("Password change attempt", { userId: user?.id });
-    
+    const reqId = newReqId();
+    const t = authLogger.timer(`${reqId} POST /auth/change-password`);
     try {
       await axios.post(`${API_BASE_URL}/auth/change-password`, data, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` },
       });
-      authLogger.info("Password changed successfully", { userId: user?.id });
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || "Change password failed";
-      authLogger.error("Password change failed", { userId: user?.id, error: errorMessage });
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setLoading(false);
+      t.done();
+    } catch (err) {
+      t.fail(err);
+      handleAxiosError(err, "Change password failed");
     }
   };
 
   const updateProfile = async (data: UpdateProfileRequest) => {
-    setError(null);
-    setLoading(true);
-    
-    authLogger.debug("Profile update attempt", { userId: user?.id });
-    
+    const reqId = newReqId();
+    const t = authLogger.timer(`${reqId} PUT /auth/profile`);
     try {
-      const response = await axios.put(`${API_BASE_URL}/auth/profile`, data, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      const updated = response.data;
-      
-      // Preserve provider data if it existed
-      if (user?.provider && !updated.provider) {
-        updated.provider = user.provider;
-      }
-      
-      setUser(updated);
-      localStorage.setItem("user", JSON.stringify(updated));
-      
-      authLogger.info("Profile updated successfully", { userId: updated.id });
+      const { data: updated } = await axios.put(
+        `${API_BASE_URL}/auth/profile`,
+        data,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      setUser((prev) => ({ ...prev, ...updated } as UserWithProvider));
+      localStorage.setItem("user", JSON.stringify({ ...user, ...updated }));
+      t.done();
       return updated;
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || "Profile update failed";
-      authLogger.error("Profile update failed", { userId: user?.id, error: errorMessage });
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      t.fail(err);
+      handleAxiosError(err, "Profile update failed");
     }
   };
 
   const uploadProfileImage = async (file: File) => {
-    setError(null);
-    setLoading(true);
-    
-    authLogger.debug("Profile image upload attempt", { userId: user?.id, fileSize: file.size });
-    
+    const reqId = newReqId();
+    const t = authLogger.timer(`${reqId} POST /auth/upload-avatar`);
     try {
       const formData = new FormData();
       formData.append("file", file);
-      
-      const response = await axios.post(`${API_BASE_URL}/auth/upload-avatar`, formData, {
+
+      const {
+        data: { profileImageUrl },
+      } = await axios.post(`${API_BASE_URL}/auth/upload-avatar`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
-        }
+          "Content-Type": "multipart/form-data",
+        },
       });
-      
-      const { profileImageUrl } = response.data;
-      
-      if (user) {
-        const u2 = { ...user, profileImageUrl };
-        setUser(u2);
-        localStorage.setItem("user", JSON.stringify(u2));
-        authLogger.info("Profile image uploaded successfully", { userId: user.id });
-      }
+
+      setUser((prev) =>
+        prev ? ({ ...prev, profileImageUrl } as UserWithProvider) : prev,
+      );
+      localStorage.setItem(
+        "user",
+        JSON.stringify({ ...user, profileImageUrl }),
+      );
+      t.done();
       return profileImageUrl;
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || "Upload failed";
-      authLogger.error("Profile image upload failed", { userId: user?.id, error: errorMessage });
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      t.fail(err);
+      handleAxiosError(err, "Upload failed");
     }
   };
 
+  /* --------------------------------------------------------------
+   * Error handling helper
+   * ------------------------------------------------------------*/
+  const handleAxiosError = (err: any, fallback: string): never => {
+    const message = err.response?.data?.message ??
+      (err.request ? "No response from server" : err.message) ??
+      fallback;
+    setError(message);
+    throw err;
+  };
+
+  /* --------------------------------------------------------------
+   * Provider value
+   * ------------------------------------------------------------*/
   return (
     <AuthContext.Provider
       value={{
@@ -493,4 +376,3 @@ export function useAuth() {
   return ctx;
 }
 
-export default AuthContext;

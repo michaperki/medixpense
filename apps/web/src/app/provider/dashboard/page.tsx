@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/app/context/AuthContext';
 import { locationsApi, proceduresApi } from '@/lib/api';
-import { getLogger, LogContext } from '@/lib/logger';
+import { getLogger, LogContext, createReqId } from '@/lib/logger';
 import {
   MapPinIcon,
   ClipboardDocumentListIcon,
@@ -11,91 +11,65 @@ import {
   CurrencyDollarIcon
 } from '@heroicons/react/24/outline';
 
-// Create a dashboard-specific logger
-const dashboardLogger = getLogger(LogContext.RENDER);
+const logger = getLogger(LogContext.RENDER);
 
 export default function ProviderDashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState({
-    locations: 0,
-    procedures: 0,
-    views: 0,
-    searchImpressions: 0
-  });
+  const [stats, setStats] = useState({ locations: 0, procedures: 0, views: 0, searchImpressions: 0 });
   const [loading, setLoading] = useState(true);
   const [recentLocations, setRecentLocations] = useState<any[]>([]);
   const [topProcedures, setTopProcedures] = useState<any[]>([]);
 
   useEffect(() => {
-    setLoading(true);
-    
-    const fetchDashboardData = async () => {
-      dashboardLogger.info('Fetching dashboard data', { 
-        userId: user?.id,
-        providerId: user?.provider?.id
-      });
-      
+    const loadDashboard = async () => {
+      if (!user) {
+        logger.debug('No user available, waiting for auth');
+        return;
+      }
+
+      const timer = logger.timer('Dashboard load');
+      const locId = createReqId('LOC');
+      const procId = createReqId('PRC');
+
       try {
-        // Load locations
-        dashboardLogger.debug('Fetching locations');
+        logger.info(`▶️ ${locId} GET /locations`);
         const locResp = await locationsApi.getAll(1, 10);
         const locations = locResp.locations ?? [];
         setRecentLocations(locations.slice(0, 3));
-        
-        dashboardLogger.debug('Locations fetched', { 
-          total: locations.length,
-          displayed: Math.min(locations.length, 3)
-        });
+        logger.info(`✅ ${locId} →${locResp.status || 200} ${locations.length} locations`);
 
-        // Only load procedures when we know our provider ID
         let procedures: any[] = [];
-        if (user?.provider?.id) {
-          dashboardLogger.debug('Fetching provider procedures', { 
-            providerId: user.provider.id 
-          });
-          
-          const procResp = await proceduresApi.getProviderProcedures(
-            user.provider.id
-          );
+        if (user.provider?.id) {
+          logger.info(`▶️ ${procId} GET /provider/procedures`);
+          const procResp = await proceduresApi.getProviderProcedures(user.provider.id);
           procedures = procResp.procedures ?? [];
-          
-          dashboardLogger.debug('Procedures fetched', { 
-            total: procedures.length 
-          });
+          logger.info(`✅ ${procId} →${procResp.status || 200} ${procedures.length} procedures`);
         } else {
-          dashboardLogger.warn('Provider ID not available, skipping procedure fetch');
+          logger.warn('Provider ID not available, skipping procedure fetch');
         }
-        
-        // Sort procedures by price and take top 5
-        setTopProcedures(
-          procedures.sort((a, b) => b.price - a.price).slice(0, 5)
-        );
 
-        // Set stats
+        setTopProcedures(procedures.sort((a, b) => b.price - a.price).slice(0, 5));
         setStats({
           locations: locations.length,
           procedures: procedures.length,
           views: Math.floor(Math.random() * 1000),
           searchImpressions: Math.floor(Math.random() * 5000)
         });
-        
-        dashboardLogger.info('Dashboard data loaded successfully', {
-          locationCount: locations.length,
-          procedureCount: procedures.length
+
+        logger.info('Dashboard state set', {
+          loc: locations.length,
+          proc: procedures.length
         });
       } catch (err) {
-        dashboardLogger.error('Error fetching dashboard data', err);
+        logger.error('❌ Dashboard data fetch failed', err);
       } finally {
         setLoading(false);
-        dashboardLogger.debug('Dashboard loading complete');
+        timer.done();
       }
     };
 
-    if (user) {
-      fetchDashboardData();
-    } else {
-      dashboardLogger.debug('No user available, waiting for auth');
-    }
+    setLoading(true);
+    loadDashboard();
   }, [user]);
 
   if (loading) {

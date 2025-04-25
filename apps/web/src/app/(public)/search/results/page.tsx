@@ -1,11 +1,11 @@
-// src/app/(public)/search/results/page.tsx
+// src/app/(public)/search/results/page.tsx – logger v2 integrated
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { searchApi } from '@/lib/api';
-import { 
+import {
   MapPinIcon,
   ListBulletIcon,
   MapIcon,
@@ -14,6 +14,9 @@ import {
   ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import dynamic from 'next/dynamic';
+
+import { renderLogger } from '@/lib/logger';
+const logger = renderLogger;
 
 const ProcedureMap = dynamic(() => import('@/components/maps/ProcedureMap'), {
   ssr: false,
@@ -27,7 +30,6 @@ const ProcedureMap = dynamic(() => import('@/components/maps/ProcedureMap'), {
 });
 
 export default function SearchResultsPage() {
-  // All your state and handlers stay the same
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -40,64 +42,106 @@ export default function SearchResultsPage() {
   const priceMin = searchParams.get('price_min') || '';
   const priceMax = searchParams.get('price_max') || '';
 
-  const [viewMode, setViewMode] = useState('list');
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [showFilters, setShowFilters] = useState(false);
-  const [results, setResults] = useState([]);
-  const [stats, setStats] = useState(null);
+  const [results, setResults] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState({ page, limit: 10, total: 0, pages: 0 });
   const [selectedDistance, setSelectedDistance] = useState(distanceRadius);
   const [selectedSort, setSelectedSort] = useState(sort);
   const [priceRangeMin, setPriceRangeMin] = useState(priceMin);
   const [priceRangeMax, setPriceRangeMax] = useState(priceMax);
   const [procedureName, setProcedureName] = useState('');
-  const [selectedResult, setSelectedResult] = useState(null);
-  const [mapCenter, setMapCenter] = useState(null);
+  const [selectedResult, setSelectedResult] = useState<any>(null);
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Keep all your useEffect hooks and handlers the same
+  // Geocode location param once Google script available
   useEffect(() => {
-    // Only attempt to geocode if we have a location string and Google Maps is loaded
-    if (window.google && location) {
-      const geocoder = new window.google.maps.Geocoder();
-      geocoder.geocode({ address: location }, (results, status) => {
-        if (status === 'OK' && results?.[0]) {
-          setMapCenter(results[0].geometry.location.toJSON());
+    if (typeof window !== 'undefined' && (window as any).google && location) {
+      const geocoder = new (window as any).google.maps.Geocoder();
+      geocoder.geocode({ address: location }, (res: any[], status: string) => {
+        if (status === 'OK' && res?.[0]) {
+          setMapCenter(res[0].geometry.location.toJSON());
         }
       });
     }
   }, [location]);
 
+  // 🟢 put the ref up here, before any effects
+  const lastKey = useRef<string>('');   // '' ⇒ no request yet
+
+  // ---------------------------------------------------------------------------
+  // Fetch search results when query-string params change
+  // ---------------------------------------------------------------------------
   useEffect(() => {
-    const performSearch = async () => {
-      if (!(query || location || categoryId)) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
+    const key = [
+      query, location, categoryId,
+      distanceRadius, sort, page,
+      priceMin, priceMax
+    ].join('|');
+
+    if (key === lastKey.current) return; // ⬅️ second Strict run → skip
+    lastKey.current = key;               // update for the next change
+
+    const timer = logger.timer('Search');   // static label – dedupes cleanly
+    setLoading(true);
+
+    (async () => {
       try {
-        const params = { query, location, categoryId, distance: distanceRadius, sort, page: page.toString(), limit: '10', price_min: priceMin, price_max: priceMax };
-        const response = await searchApi.searchProcedures(params);
-        setResults(response.results);
-        setPagination(response.pagination);
-        setStats(response.stats || null);
-        if (response.data?.searchLocation) {
-          setMapCenter({ lat: response.data.searchLocation.latitude, lng: response.data.searchLocation.longitude });
+        if (!(query || location || categoryId)) {
+          setLoading(false);
+          return;
         }
-        setProcedureName(response.procedureName || query || 'healthcare procedures');
+
+        const res = await searchApi.searchProcedures({
+          query, location, categoryId,
+          distance: distanceRadius,
+          sort,
+          page: page.toString(),
+          limit: '10',
+          price_min: priceMin,
+          price_max: priceMax
+        });
+
+        setResults(res.results);
+        setPagination(res.pagination);
+        setStats(res.stats || null);
+        if (res.data?.searchLocation) {
+          setMapCenter({
+            lat: res.data.searchLocation.latitude,
+            lng: res.data.searchLocation.longitude
+          });
+        }
+        setProcedureName(res.procedureName || query || 'healthcare procedures');
         setError(null);
+        timer.done({ count: res.results.length });
       } catch (err) {
-        console.error('Search error:', err);
+        logger.error('Search error', err);
         setError('An error occurred while searching. Please try again.');
         setResults([]);
+        timer.fail(err);
       } finally {
         setLoading(false);
       }
-    };
-    performSearch();
-  }, [query, location, categoryId, distanceRadius, sort, page, priceMin, priceMax]);
+    })();
+  }, [
+    query, location, categoryId,
+    distanceRadius, sort, page,
+    priceMin, priceMax
+  ]);
 
+
+  // UI handlers with log breadcrumbs
   const handleApplyFilters = () => {
+    logger.info('Apply filters', {
+      distance: selectedDistance,
+      sort: selectedSort,
+      priceMin: priceRangeMin,
+      priceMax: priceRangeMax
+    });
+
     const params = new URLSearchParams(searchParams.toString());
     params.set('distance', selectedDistance);
     params.set('sort', selectedSort);
@@ -108,15 +152,17 @@ export default function SearchResultsPage() {
     setShowFilters(false);
   };
 
-  const handlePageChange = (newPage) => {
+  const handlePageChange = (newPage: number) => {
+    logger.info('Page change', { from: pagination.page, to: newPage });
     const params = new URLSearchParams(searchParams.toString());
     params.set('page', newPage.toString());
     router.push(`/search/results?${params.toString()}`);
     window.scrollTo(0, 0);
   };
 
-  const calculateSavings = (price) => (stats ? stats.average - price : null);
-  const formatDistance = (d) => d === undefined ? 'Unknown' : d < 0.1 ? '<0.1 miles' : d < 10 ? d.toFixed(1) + ' miles' : Math.round(d) + ' miles';
+  const calculateSavings = (price: number) => (stats ? stats.average - price : null);
+  const formatDistance = (d?: number) =>
+    d === undefined ? 'Unknown' : d < 0.1 ? '<0.1 miles' : d < 10 ? `${d.toFixed(1)} miles` : `${Math.round(d)} miles`;
 
   const distanceOptions = [
     { value: '5', label: '5 miles' },
@@ -310,7 +356,7 @@ export default function SearchResultsPage() {
             
             {!loading && !error && results.length === 0 && (
               <div className="empty-state">
-                <MapPinIcon className="empty-state-icon" />
+                <MapPinIcon className="empty-state-icon h-16 w-16 text-gray-400" />
                 <h3 className="empty-state-title" style={textPrimaryStyle}>No results found.</h3>
                 <p className="empty-state-message" style={textSecondaryStyle}>Try adjusting your search criteria or filters.</p>
               </div>

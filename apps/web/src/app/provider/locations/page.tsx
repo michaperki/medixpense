@@ -1,195 +1,157 @@
-'use client';
 
+// src/app/(provider)/locations/page.tsx – adjusted for logger v2 (timer API)
+
+'use client';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/useToast';
-import { useQuery, useMutation, invalidateQueries } from '@/hooks/useQuery';
 import { locationService, type Location } from '@/services';
 import { getLogger, LogContext } from '@/lib/logger';
-import { 
-  PlusIcon, 
-  PencilIcon, 
-  TrashIcon, 
-  MapPinIcon, 
+import {
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  MapPinIcon,
   BuildingOfficeIcon,
   ClipboardDocumentListIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
-  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 
-// Create a location-specific logger
-const locationsLogger = getLogger(LogContext.RENDER);
+/**
+ * Page-local logger (RENDER context) – v2 API
+ */
+const log = getLogger(LogContext.RENDER);
+
+const LIMIT = 10;
 
 export default function LocationsPage() {
   const router = useRouter();
   const { showToast } = useToast();
-  
-  // Pagination state
+
+  /* -------------------------------------------------------------------------
+   * State
+   * --------------------------------------------------------------------- */
   const [page, setPage] = useState(1);
-  const limit = 10;
-  
-  // Modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [locationToDelete, setLocationToDelete] = useState<Location | null>(null);
-  
-  // Direct data state to avoid dependency on hook
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [pagination, setPagination] = useState({ page, limit, total: 0, pages: 0 });
-  const [isLoading, setIsLoading] = useState(true);
-  
-  // Ref to prevent effect loops
-  const initialLoadRef = useRef(false);
-  
-  // Fetch data directly to sidestep hook issues
-  useEffect(() => {
-    // Avoid multiple requests
-    if (initialLoadRef.current) return;
-    
-    const fetchData = async () => {
-      locationsLogger.info('Initial locations data fetch', { page, limit });
-      
-      try {
-        setIsLoading(true);
-        
-        // Track performance of data loading
-        const result = await locationsLogger.time('Initial locations load', async () => {
-          return locationService.getAll({ page, limit });
-        });
-        
-        if (result && result.locations) {
-          locationsLogger.debug('Locations data loaded', { 
-            count: result.locations.length,
-            total: result.pagination?.total || 0
-          });
-          
-          setLocations(result.locations);
-          setPagination(result.pagination || { page, limit, total: 0, pages: 0 });
-        }
-      } catch (error) {
-        locationsLogger.error('Failed to fetch initial locations data', error);
-        showToast(`Error loading locations: ${(error as Error).message}`, 'error');
-      } finally {
-        setIsLoading(false);
-        initialLoadRef.current = true; // Mark as loaded
-      }
-    };
-    
-    fetchData();
-  }, []); // Empty dependency array to run once
+  const [locations, setLocations]   = useState<Location[]>([]);
+  const [pagination, setPagination] = useState({ page: 1, limit: LIMIT, total: 0, pages: 0 });
+  const [isLoading, setIsLoading]   = useState(true);
 
-  // Handle page change - fetch new data when page changes
-  const handlePageChange = useCallback((newPage: number) => {
-    locationsLogger.debug('Changing page', { 
-      currentPage: page, 
-      newPage, 
-      totalPages: pagination.pages 
-    });
-    
-    setIsLoading(true);
-    setPage(newPage);
-    
-    // Track performance of pagination change
-    locationsLogger.time('Pagination page change', async () => {
-      try {
-        const result = await locationService.getAll({ page: newPage, limit });
-        
-        if (result && result.locations) {
-          locationsLogger.debug('Page data loaded', { 
-            page: newPage,
-            count: result.locations.length
-          });
-          
-          setLocations(result.locations);
-          setPagination(result.pagination || { page: newPage, limit, total: 0, pages: 0 });
-        }
-      } catch (error) {
-        locationsLogger.error('Failed to change page', { newPage, error });
-        showToast(`Error: ${(error as Error).message}`, 'error');
-      } finally {
-        setIsLoading(false);
-      }
-    });
-  }, [page, limit, pagination.pages, showToast]);
+  const firstLoad = useRef(false);
 
-  // Delete location
-  const handleDeleteLocation = async (id: string) => {
-    locationsLogger.info('Deleting location', { id });
-    
+  /* -------------------------------------------------------------------------
+   * Helpers
+   * --------------------------------------------------------------------- */
+  async function fetchLocations(currentPage: number) {
+    const timer = log.timer(
+      currentPage === page ? 'Initial locations load' : `Load page ${currentPage}`
+    );
     try {
-      setIsLoading(true);
-      
-      // Track performance of deletion
-      await locationsLogger.time('Location deletion', async () => {
-        await locationService.delete(id);
-      });
-      
-      locationsLogger.info('Location deleted successfully', { id });
-      showToast('Location deleted successfully', 'success');
-      
-      // Refresh data
-      locationsLogger.debug('Refreshing locations after deletion');
-      const result = await locationService.getAll({ page, limit });
-      
-      if (result && result.locations) {
+      const result = await locationService.getAll({ page: currentPage, limit: LIMIT });
+      if (result?.locations) {
         setLocations(result.locations);
-        setPagination(result.pagination || { page, limit, total: 0, pages: 0 });
+        setPagination(result.pagination ?? { page: currentPage, limit: LIMIT, total: 0, pages: 0 });
+        log.debug('Locations fetched', {
+          page: currentPage,
+          count: result.locations.length,
+          total: result.pagination?.total,
+        });
       }
-      
-      setDeleteModalOpen(false);
-      setLocationToDelete(null);
-    } catch (error) {
-      locationsLogger.error('Failed to delete location', { id, error });
-      showToast(`Error: ${(error as Error).message}`, 'error');
+      timer.done();
+    } catch (err) {
+      timer.fail(err);
+      throw err;
+    }
+  }
+
+  /* -------------------------------------------------------------------------
+   * Effects – initial load
+   * --------------------------------------------------------------------- */
+  useEffect(() => {
+    if (firstLoad.current) return;
+    firstLoad.current = true;
+
+    setIsLoading(true);
+    fetchLocations(1)
+      .catch(err => {
+        log.error('Failed to fetch initial locations', err);
+        showToast(`Error loading locations: ${(err as Error).message}`, 'error');
+      })
+      .finally(() => setIsLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* -------------------------------------------------------------------------
+   * Pagination handler
+   * --------------------------------------------------------------------- */
+  const handlePageChange = useCallback(
+    (newPage: number) => {
+      log.debug('Page change requested', { from: page, to: newPage });
+      setIsLoading(true);
+      setPage(newPage);
+      fetchLocations(newPage)
+        .catch(err => {
+          log.error('Failed to change page', err);
+          showToast(`Error: ${(err as Error).message}`, 'error');
+        })
+        .finally(() => setIsLoading(false));
+    },
+    [page, showToast]
+  );
+
+  /* -------------------------------------------------------------------------
+   * Delete location flow
+   * --------------------------------------------------------------------- */
+  const handleDeleteLocation = async (id: string) => {
+    const timer = log.timer('Delete location');
+    try {
+      await locationService.delete(id);
+      timer.done();
+      showToast('Location deleted successfully', 'success');
+      // refresh current page
+      setIsLoading(true);
+      await fetchLocations(page);
+    } catch (err) {
+      timer.fail(err);
+      log.error('Delete failed', err);
+      showToast(`Error: ${(err as Error).message}`, 'error');
     } finally {
       setIsLoading(false);
+      setDeleteModalOpen(false);
+      setLocationToDelete(null);
     }
   };
 
-  // Handle delete click
-  const handleDeleteClick = useCallback((location: Location) => {
-    locationsLogger.debug('Delete location initiated', { 
-      id: location.id,
-      name: location.name
-    });
-    
-    setLocationToDelete(location);
+  const handleDeleteClick = useCallback((loc: Location) => {
+    log.debug('Delete modal opened', { id: loc.id });
+    setLocationToDelete(loc);
     setDeleteModalOpen(true);
   }, []);
-  
-  // Handle confirm delete
+
   const handleConfirmDelete = useCallback(() => {
-    if (!locationToDelete) {
-      locationsLogger.warn('Attempted to confirm delete with no location selected');
-      return;
-    }
-    
-    locationsLogger.debug('Delete confirmed', { id: locationToDelete.id });
-    handleDeleteLocation(locationToDelete.id);
+    if (locationToDelete) handleDeleteLocation(locationToDelete.id);
   }, [locationToDelete]);
-  
-  // Handle cancel delete
+
   const handleCancelDelete = useCallback(() => {
-    locationsLogger.debug('Delete cancelled', { 
-      id: locationToDelete?.id
-    });
-    
-    setLocationToDelete(null);
     setDeleteModalOpen(false);
-  }, [locationToDelete]);
-  
-  // Log when component renders with data
+    setLocationToDelete(null);
+  }, []);
+
+  /* -------------------------------------------------------------------------
+   * Render
+   * --------------------------------------------------------------------- */
   useEffect(() => {
-    if (!isLoading && locations.length > 0) {
-      locationsLogger.debug('Rendering locations list', {
-        locationCount: locations.length,
-        currentPage: page,
+    if (!isLoading) {
+      log.debug('Rendering list', {
+        page,
+        loaded: locations.length,
         totalPages: pagination.pages,
-        totalItems: pagination.total
       });
     }
-  }, [isLoading, locations, page, pagination]);
+  }, [isLoading, locations.length, page, pagination.pages]);
   
   return (
     <div className="space-y-6">
