@@ -99,22 +99,42 @@ export function createLogger(ctx: LogContext | string) {
     debug(msg: string, data?: any) {
       if (cfg.level > LogLevel.DEBUG || !enabled()) return;
       const key = fmt(msg);
-      printOnce(key, () => data === undefined ? console.debug(key, chainedFields) : console.debug(key, { ...chainedFields, ...redact(data) }));
+      printOnce(key, () => {
+        if (data && Object.keys(data).length > 0) {
+          console.debug(key, { ...chainedFields, ...redact(data) });
+        } else if (Object.keys(chainedFields).length > 0) {
+          console.debug(key, chainedFields);
+        } else {
+          console.debug(key);
+        }
+      });
     },
     info(msg: string, data?: any) {
       if (cfg.level > LogLevel.INFO || !enabled()) return;
       const key = fmt(msg);
-      printOnce(key, () => data === undefined ? console.info(key, chainedFields) : console.info(key, { ...chainedFields, ...redact(data) }));
+      printOnce(key, () => {
+        if (data && Object.keys(data).length > 0) {
+          console.info(key, { ...chainedFields, ...redact(data) });
+        } else if (Object.keys(chainedFields).length > 0) {
+          console.info(key, chainedFields);
+        } else {
+          console.info(key);
+        }
+      });
     },
     warn(msg: string, data?: any) {
       if (cfg.level > LogLevel.WARN || !enabled()) return;
-      const payload = data === undefined ? chainedFields : { ...chainedFields, ...redact(data) };
-      console.warn(fmt(msg), payload);
+      const payload = (data && Object.keys(data).length > 0)
+        ? { ...chainedFields, ...redact(data) }
+        : (Object.keys(chainedFields).length > 0 ? chainedFields : undefined);
+      payload ? console.warn(fmt(msg), payload) : console.warn(fmt(msg));
     },
     error(msg: string, err?: any) {
       if (cfg.level > LogLevel.ERROR || !enabled()) return;
-      const payload = err === undefined ? chainedFields : { ...chainedFields, ...err };
-      console.error(fmt(msg), payload);
+      const payload = (err && Object.keys(err).length > 0)
+        ? { ...chainedFields, ...redact(err) }
+        : (Object.keys(chainedFields).length > 0 ? chainedFields : undefined);
+      payload ? console.error(fmt(msg), payload) : console.error(fmt(msg));
     },
     group(title: string, run: () => void, opts: { collapsed?: boolean } = { collapsed: true }) {
       if (!enabled()) return;
@@ -141,9 +161,8 @@ export function createLogger(ctx: LogContext | string) {
         }
       };
     },
-    // inside createLogger() – add below timer()
     time<T>(label: string, fn: () => Promise<T> | T): Promise<T> {
-      const t = out.timer(label);          // start ⏱️
+      const t = out.timer(label);
       return (async () => {
         try {
           const val = await fn();
