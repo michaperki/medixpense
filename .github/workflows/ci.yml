@@ -6,6 +6,16 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch: {}
+  
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+  
+notifications:
+  email:
+    on_success: never
+    on_failure: never
 
 jobs:
   build-and-test:
