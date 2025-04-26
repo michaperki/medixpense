@@ -53,12 +53,12 @@ export default function AddProcedurePage() {
         setLoading(true);
 
         await addProcedureLogger.group('Initial Data Fetch', async () => {
-          const locationData = await addProcedureLogger.timer('Fetch location details', () =>
+          const locationData = await addProcedureLogger.time('Fetch location details', () =>
             locationsApi.getById(locationId)
           );
           setLocation(locationData);
 
-          const categoriesResponse = await addProcedureLogger.timer('Fetch procedure categories', () =>
+          const categoriesResponse = await addProcedureLogger.time('Fetch procedure categories', () =>
             proceduresApi.getCategories()
           );
 
@@ -96,29 +96,70 @@ export default function AddProcedurePage() {
 
     const handler = setTimeout(async () => {
       try {
-        setSearchLoading(true);
-        addProcedureLogger.debug('Searching templates', { searchTerm: cleanedSearchTerm, categoryId: selectedCategory });
-
+        /* ── build query ─────────────────────────────────────────────── */
         const params: Record<string, any> = {};
         if (cleanedSearchTerm) params.query = cleanedSearchTerm;
-        if (selectedCategory) params.categoryId = selectedCategory;
+        if (selectedCategory)  params.categoryId = selectedCategory;
 
-        const templatesResponse = await addProcedureLogger.timer('Search procedure templates', () =>
-          searchApi.searchProcedures(params)
-        );
+        if (cleanedSearchTerm.length < 2 && !selectedCategory) {
+          setTemplates([]);
+          setFilteredTemplates([]);
+          return;         // ⬅️  debounce never fires, no 400, no ❌
+        }
 
-        const templatesData = templatesResponse || [];  // fallback to empty array
-        addProcedureLogger.debug('Raw templatesData from API', templatesData);
-
-        addProcedureLogger.debug('Template search results', {
-          count: templatesData.length,
-          hasResults: templatesData.length > 0
+        addProcedureLogger.debug('Searching templates', {
+          query: params.query ?? '(empty)',
+          categoryId: params.categoryId ?? '(none)',
         });
 
-        const filtered = templatesData.filter(tpl => tpl.category && tpl.category.name);
+        setSearchLoading(true);
 
-        setTemplates(filtered);
-        setFilteredTemplates(filtered);
+        /* ── call API via timed logger ───────────────────────────────── */
+        const templatesResponse = await addProcedureLogger.time(
+          'Search procedure templates',
+          () => searchApi.searchProcedures(params),
+        );
+
+        /* ── normalise every possible return shape ───────────────────── */
+        /* ── normalise every possible return shape ───────────────────── */
+        let templatesDataResult: any[] = [];
+
+        if (Array.isArray(templatesResponse)) {
+          // raw array
+          templatesDataResult = templatesResponse;
+        } else if (templatesResponse?.results) {
+          // plain object from backend
+          templatesDataResult = templatesResponse.results;
+        } else if (typeof templatesResponse?.done === 'function') {
+          // jQuery-style deferred – wrap it in a promise
+          const responseData: any = await new Promise((resolve, reject) => {
+            templatesResponse.done((data: any) => resolve(data));
+            templatesResponse.fail((err: any)  => reject(err));
+          });
+
+          // responseData is the real JSON { results:[...], pagination:{...}, … }
+          templatesDataResult = Array.isArray(responseData)
+            ? responseData
+            : (responseData.results ?? []);
+        } else {
+          addProcedureLogger.warn('Unrecognised templatesResponse shape', { templatesResponse });
+        }
+
+        /* ── log & store ─────────────────────────────────────────────── */
+        addProcedureLogger.debug('Templates fetched', {
+          count: templatesDataResult.length,
+          hasResults: templatesDataResult.length > 0,
+        });
+
+        const filtered = templatesDataResult.filter(t =>
+          t.procedure?.category?.name || t.category?.name,
+        );
+
+        // keep only the Procedure objects (frontend expects that)
+        const procedures = filtered.map(t => t.procedure ?? t);
+
+        setTemplates(procedures);
+        setFilteredTemplates(procedures);
       } catch (err) {
         addProcedureLogger.error('Template search failed', extractError(err));
       } finally {
@@ -141,7 +182,7 @@ export default function AddProcedurePage() {
       try {
         setStatsLoading(true);
 
-        const statsResponse = await addProcedureLogger.timer('Fetch price statistics', () =>
+        const statsResponse = await addProcedureLogger.time('Fetch price statistics', () =>
           searchApi.getStats(selectedTemplate.id, {
             locationId,
             radius: 50
@@ -235,7 +276,7 @@ export default function AddProcedurePage() {
 
     try {
       setIsSubmitting(true);
-      await addProcedureLogger.timer('Add procedure price', () =>
+      await addProcedureLogger.time('Add procedure price', () =>
         proceduresApi.addPrice({
           locationId,
           templateId: selectedTemplate.id,

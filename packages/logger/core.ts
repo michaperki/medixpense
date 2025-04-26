@@ -141,6 +141,20 @@ export function createLogger(ctx: LogContext | string) {
         }
       };
     },
+    // inside createLogger() – add below timer()
+    time<T>(label: string, fn: () => Promise<T> | T): Promise<T> {
+      const t = out.timer(label);          // start ⏱️
+      return (async () => {
+        try {
+          const val = await fn();
+          t.done();
+          return val;
+        } catch (err) {
+          t.fail(err);
+          throw err;
+        }
+      })();
+    },
     with(fields: Record<string, any>) {
       chainedFields = { ...chainedFields, ...fields };
       return out;
