@@ -86,6 +86,7 @@ export default function SearchPage() {
         };
 
         const response = await searchApi.searchProcedures(params);
+        console.log('🔎 raw search response:', response);
 
         console.log(`[${requestId}] ✅ Search results received`, {
           count: response.results?.length ?? 0,
@@ -237,7 +238,7 @@ export default function SearchPage() {
           <div className="loading-spinner">
             <div className="spinner spinner-md"></div>
           </div>
-        ) : results.length > 0 ? (
+        ) : results?.length > 0 ? (
           <div className="dashboard-container">
             {/* Results count and filter controls */}
             <div className="dashboard-header">

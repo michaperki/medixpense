@@ -82,10 +82,10 @@ export default function SearchResultsPage() {
       priceMin, priceMax
     ].join('|');
 
-    if (key === lastKey.current) return; // ⬅️ second Strict run → skip
-    lastKey.current = key;               // update for the next change
+    if (key === lastKey.current) return;
+    lastKey.current = key;
 
-    const timer = logger.timer('Search');   // static label – dedupes cleanly
+    const timer = logger.timer('Search');
     setLoading(true);
 
     (async () => {
@@ -96,7 +96,9 @@ export default function SearchResultsPage() {
         }
 
         const res = await searchApi.searchProcedures({
-          query, location, categoryId,
+          query,
+          location,
+          categoryId,
           distance: distanceRadius,
           sort,
           page: page.toString(),
@@ -105,8 +107,10 @@ export default function SearchResultsPage() {
           price_max: priceMax
         });
 
-        setResults(res.results);
-        setPagination(res.pagination);
+        // <-- NEW: force an array and default pagination
+        const safeResults = Array.isArray(res.results) ? res.results : [];
+        setResults(safeResults);
+        setPagination(res.pagination ?? { page, limit: 10, total: 0, pages: 0 });
         setStats(res.stats || null);
         if (res.data?.searchLocation) {
           setMapCenter({
@@ -116,11 +120,12 @@ export default function SearchResultsPage() {
         }
         setProcedureName(res.procedureName || query || 'healthcare procedures');
         setError(null);
-        timer.done({ count: res.results.length });
+
+        timer.done({ count: safeResults.length });
       } catch (err) {
         logger.error('Search error', err);
         setError('An error occurred while searching. Please try again.');
-        setResults([]);
+        setResults([]);  // <-- ensure it's never undefined
         timer.fail(err);
       } finally {
         setLoading(false);
@@ -354,7 +359,7 @@ export default function SearchResultsPage() {
               </div>
             )}
             
-            {!loading && !error && results.length === 0 && (
+            {!loading && !error && results?.length === 0 && ( 
               <div className="empty-state">
                 <MapPinIcon className="empty-state-icon h-16 w-16 text-gray-400" />
                 <h3 className="empty-state-title" style={textPrimaryStyle}>No results found.</h3>
@@ -362,7 +367,7 @@ export default function SearchResultsPage() {
               </div>
             )}
 
-            {!loading && !error && results.length > 0 && (
+            {!loading && !error && results?.length > 0 && (
               viewMode === 'list' ? (
                 <div className="content-block">
                   {results.map(r => (
@@ -385,7 +390,7 @@ export default function SearchResultsPage() {
                       </div>
                       <div className="card-footer flex justify-between items-center">
                         <div>
-                          <p className="font-medium" style={textPrimaryStyle}>{r.location.provider.name}</p>
+                          <p className="font-medium" style={textPrimaryStyle}>{r.provider.name}</p>
                           <p className="text-sm" style={textTertiaryStyle}>{r.location.address}, {r.location.city}</p>
                         </div>
                         <div className="flex space-x-2">

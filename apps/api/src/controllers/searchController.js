@@ -119,38 +119,45 @@ export async function getProcedures(req, res) {
         sorted.sort((a, b) => a.price - b.price);
     }
 
+    // ─── after your `const sorted = …` ─────────────────────────────────────────
+
     const results = sorted.map(item => ({
       id: item.id,
       price: item.price,
       comments: item.comments,
       distance: item.distance,
+
       procedure: {
-        id: item.template.id,
-        name: item.template.name,
+        id:          item.template.id,
+        name:        item.template.name,
         description: item.template.description,
         category: {
-          id: item.template.category.id,
+          id:   item.template.category.id,
           name: item.template.category.name
         }
       },
+
+      provider: {
+        id:      item.location.provider.id,
+        name:    item.location.provider.organizationName,
+        logoUrl: item.location.provider.logoUrl
+      },
+
       location: {
-        id: item.location.id,
-        name: item.location.name,
+        id:      item.location.id,
+        name:    item.location.name,
         address: item.location.address1
-          ? `${item.location.address1}, ${item.location.city}, ${item.location.state} ${item.location.zipcode}`
+          ? `${item.location.address1}, ${item.location.city}, ${item.location.state} ${item.location.zipCode}`
           : 'Address not available',
-        city: item.location.city,
-        state: item.location.state,
-        zipcode: item.location.zipcode,
-        latitude: item.location.latitude,
-        longitude: item.location.longitude,
-        provider: {
-          id: item.location.provider.id,
-          name: item.location.provider.organizationName,
-          logoUrl: item.location.provider.logoUrl
-        }
+        city:    item.location.city,
+        state:   item.location.state,
+        zipCode: item.location.zipCode,
+        latitude:  item.location.latitude,
+        longitude: item.location.longitude
       }
     }));
+
+    // ─── then build your `response = { results, pagination: { … } }` as before ────
 
     const response = {
       results,

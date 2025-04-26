@@ -145,13 +145,13 @@ export const proceduresApi = {
 
 // ─── SEARCH ────────────────────────────────────────────────────
 export const searchApi = {
-  // In searchApi.js or similar file
-  searchProcedures: async (params: any) => {
-    const { results } = await apiClient.get<SearchResponse>(
+  searchProcedures: async (params: any): Promise<SearchResponse> => {
+    // apiClient.get<T> already unwraps .data for you
+    const res = await apiClient.get<SearchResponse>(
       '/search/procedures',
       { params }
     );
-    return results ?? [];          // <- return the array only
+    return res;    // ← return the full { results, pagination, stats, … }
   },
 
   getStats: async (templateId: string, params?: any) => {
