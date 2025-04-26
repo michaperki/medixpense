@@ -36,6 +36,7 @@ export default function HomePage() {
 
     // Navigate to search page with parameters
     router.push(`/search?${params.toString()}`);
+
   };
 
   return (
