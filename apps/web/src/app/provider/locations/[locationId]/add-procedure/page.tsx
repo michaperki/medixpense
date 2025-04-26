@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { locationsApi, proceduresApi, searchApi } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
@@ -33,11 +33,12 @@ export default function AddProcedurePage() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const ran = useRef(false);
 
   useEffect(() => {
     addProcedureLogger.debug('Add procedure page initialized', {
       locationId,
-      path: window.location.pathname
+      path: window.location.pathname,
     });
 
     return () => {
@@ -48,10 +49,8 @@ export default function AddProcedurePage() {
   useEffect(() => {
     async function fetchInitialData() {
       addProcedureLogger.debug('Fetching initial data', { locationId });
-
       try {
         setLoading(true);
-
         await addProcedureLogger.group('Initial Data Fetch', async () => {
           const locationData = await addProcedureLogger.time('Fetch location details', () =>
             locationsApi.getById(locationId)
@@ -61,12 +60,10 @@ export default function AddProcedurePage() {
           const categoriesResponse = await addProcedureLogger.time('Fetch procedure categories', () =>
             proceduresApi.getCategories()
           );
-
           const categoriesData = categoriesResponse.categories || [];
           addProcedureLogger.debug('Categories fetched', { count: categoriesData.length });
           setCategories(categoriesData);
         });
-
         setError(null);
       } catch (err: any) {
         addProcedureLogger.error('Failed to fetch initial data', extractError(err));
@@ -76,6 +73,8 @@ export default function AddProcedurePage() {
       }
     }
 
+    if (ran.current && process.env.NODE_ENV !== 'production') return;
+    ran.current = true;
     fetchInitialData();
   }, [locationId]);
 
@@ -157,9 +156,9 @@ export default function AddProcedurePage() {
 
         // keep only the Procedure objects (frontend expects that)
         const procedures = filtered.map(t => t.procedure ?? t);
-
-        setTemplates(procedures);
-        setFilteredTemplates(procedures);
+        const unique = Array.from(new Map(procedures.map(p => [p.id, p])).values());
+        setTemplates(unique);
+        setFilteredTemplates(unique);
       } catch (err) {
         addProcedureLogger.error('Template search failed', extractError(err));
       } finally {
@@ -291,10 +290,17 @@ export default function AddProcedurePage() {
       });
 
       showToast('Procedure price added successfully', 'success');
-      addProcedureLogger.debug('Navigating to procedures list');
       router.push(`/provider/locations/${locationId}/procedures`);
-    } catch (err) {
-      addProcedureLogger.error('Failed to add procedure price', extractError(err));
+    } catch (err: any) {
+      const errorObj = extractError(err);
+      addProcedureLogger.error('Failed to add procedure price', errorObj);
+
+      if (errorObj.status === 400) {
+        showToast(errorObj.message, 'error');
+        router.push(`/provider/locations/${locationId}/procedures`);
+        return;
+      }
+
       showToast('Failed to add procedure price', 'error');
     } finally {
       setIsSubmitting(false);

@@ -224,10 +224,10 @@ export default function ProceduresPage() {
         // searchApi returns an array of templates ({ id,name,description,category })
         const raw = await searchApi.searchProcedures(params);
         // wrap each template in your Procedure shape (with a placeholder price)
-        const normalized = raw.map(tpl => ({
-          id: tpl.id,
-          price: 0,            // or whatever default makes sense
-          template: tpl
+        const normalized = raw.map(item => ({
+          id: item.id,             // ← use the price‐record id
+          price: item.price,
+          template: item.procedure  // or p.template, if you’re normalizing both shapes
         }));
         if (!cancelled) setProcedures(normalized);
       } catch (err) {
