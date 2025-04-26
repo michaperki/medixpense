@@ -60,26 +60,26 @@ export async function getTemplates(req, res) {
 export async function getProviderProcedures(req, res) {
   try {
     const { locationId } = req.query;
-    
-    // Build where clause based on location
-    const where = {};
-    
+    const providerId = req.user?.provider?.id;
+    if (!providerId) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+
+    // Always scope to this provider
+    const where = {
+      location: { providerId }
+    };
+
+    // Optionally filter to a single location
     if (locationId) {
       where.locationId = locationId;
-    } else if (req.user?.provider?.id) {
-      // If no location specified, get all procedures for this provider
-      where.location = {
-        providerId: req.user.provider.id
-      };
     }
-    
+
     const procedures = await prisma.procedurePrice.findMany({
       where,
       include: {
         template: {
-          include: {
-            category: true
-          }
+          include: { category: true }
         },
         location: true
       },
@@ -88,7 +88,7 @@ export async function getProviderProcedures(req, res) {
         { template: { name: 'asc' } }
       ]
     });
-    
+
     res.json({ procedures });
   } catch (err) {
     console.error('Error fetching provider procedures:', err);
