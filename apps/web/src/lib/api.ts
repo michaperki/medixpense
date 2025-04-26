@@ -112,6 +112,11 @@ export const proceduresApi = {
     return procedureService.getProcedureById(id);
   },
 
+  getProceduresByLocation: async (locationId: string) => {
+    procedureLogger.with({ locationId }).debug('Get procedures by location');
+    return apiClient.get(`/locations/${locationId}/procedures`).then(res => res.procedures);
+  },
+
   addPrice: async (data: any) => {
     procedureLogger.with({ templateId: data.templateId }).info('Add price');
     return procedureService.addPrice(data);

@@ -258,3 +258,23 @@ export async function deleteProcedurePrice(req, res) {
     res.status(500).json({ message: 'Failed to delete procedure price' });
   }
 }
+
+export async function getProceduresByLocation(req, res) {
+  const { locationId } = req.params;
+
+  try {
+    const procedures = await prisma.procedurePrice.findMany({
+      where: { locationId },
+      include: {
+        template: {
+          include: { category: true },
+        },
+      },
+    });
+
+    return res.status(200).json({ procedures });
+  } catch (error) {
+    console.error('Error fetching procedures for location:', error);
+    return res.status(500).json({ message: 'Failed to fetch procedures' });
+  }
+}

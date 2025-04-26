@@ -89,90 +89,57 @@ export default function ProceduresPage() {
   }, [locationId]);
   
   const fetchLocationAndProcedures = async () => {
-    locationProceduresLogger.info('Fetching location and procedures data', { locationId });
-
-    let locationData: Location | null = null;
-    let proceduresData: Procedure[] = [];
+    locationProceduresLogger.info('Fetching location + procedures', { locationId });
 
     try {
       setLoading(true);
+      setError(null);
 
-      locationData = await locationsApi.getById(locationId);
-      locationProceduresLogger.debug('Fetched location', { locationData });
-      setLocation(locationData);
+      // Fetch location and procedures in parallel
+      const [locationData, proceduresResp] = await Promise.all([
+        locationsApi.getById(locationId),
+        proceduresApi.getProceduresByLocation(locationId)
+      ]);
 
       if (!locationData) {
-        const errorMsg = 'Location data not found';
-        locationProceduresLogger.warn('Location data not found', { locationId });
-        throw new Error(errorMsg);
+        throw new Error('Location not found');
       }
 
-      locationProceduresLogger.debug('Location data fetched', { 
+      const proceduresData: Procedure[] = Array.isArray(proceduresResp)
+        ? proceduresResp
+        : proceduresResp.procedures ?? [];
+
+      // Success: Update state
+      setLocation(locationData);
+      setProcedures(proceduresData);
+
+      // Extract unique categories
+      const categories = [
+        ...new Map(
+          proceduresData
+            .filter(p => p.template?.category)
+            .map(p => [p.template.category.id, p.template.category])
+        ).values()
+      ];
+      setCategories(categories);
+
+      locationProceduresLogger.debug('Fetch success', {
         locationName: locationData.name,
-        locationCity: locationData.city,
-        locationState: locationData.state
+        proceduresCount: proceduresData.length,
+        categoriesCount: categories.length
       });
 
-      setLocation(locationData);
-      locationProceduresLogger.debug('Location set in state', { location: locationData });
-
-      try {
-        locationProceduresLogger.debug('Calling getProviderProcedures()', { locationId });
-        const proceduresResponse = await proceduresApi.getProviderProcedures({ locationId });
-
-        proceduresData = Array.isArray(proceduresResponse)
-          ? proceduresResponse
-          : proceduresResponse?.procedures ?? proceduresResponse?.data?.procedures ?? [];
-
-        if (!Array.isArray(proceduresData)) {
-          locationProceduresLogger.error('Unexpected response shape for procedures', { proceduresResponse });
-          setProcedures([]);
-          return;
-        }
-
-        locationProceduresLogger.debug('Procedures data fetched', {
-          count: proceduresData.length,
-          hasProcedures: proceduresData.length > 0,
-          responseFormat: proceduresResponse?.procedures ? 'direct' :
-                        (proceduresResponse?.data ? 'nested' : 'unknown')
-        });
-
-        setProcedures(proceduresData);
-
-        if (proceduresData.length > 0) {
-          const uniqueCategories = [...new Set(
-            proceduresData
-              .filter(p => p.template && p.template.category)
-              .map((p) => p.template.category)
-              .map(category => JSON.stringify(category))
-          )].map(str => JSON.parse(str));
-
-          locationProceduresLogger.debug('Categories extracted', { 
-            categoryCount: uniqueCategories.length 
-          });
-
-          setCategories(uniqueCategories);
-        } else {
-          locationProceduresLogger.debug('No procedures found for location');
-        }
-      } catch (procedureErr) {
-        locationProceduresLogger.error('Failed to fetch procedures', procedureErr);
-        setProcedures([]);
-      }
-
-      setError(null);
-    } catch (err) {
-      locationProceduresLogger.error('Failed to fetch location data', err);
-      setError('Failed to load location data. Please try again later.');
+    } catch (err: any) {
+      locationProceduresLogger.error('Fetch failed', { error: err.message || err });
+      setError('Failed to load location or procedures.');
+      setLocation(null);
+      setProcedures([]);
+      setCategories([]);
     } finally {
       setLoading(false);
-      locationProceduresLogger.debug('Data fetching completed', {
-        hasLocation: !!locationData,
-        procedureCount: proceduresData?.length ?? 0,
-        hasError: !!error
-      });
     }
   };
+
   
   // Handle sorting
   const handleSort = (field: SortField) => {
@@ -204,41 +171,18 @@ export default function ProceduresPage() {
   };
 
   // whenever searchTerm or selectedCategory changes, re‐query the server
-  useEffect(() => {
-    const q = searchTerm.trim();
-    // if both empty, don’t override your “already added” list
-    if (!q && !selectedCategory) return;
+  // ✅ NEW: local filtering, no server call
+  const filteredProcedures = procedures.filter(p =>
+    (!searchTerm || p.template.name.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    (!selectedCategory || p.template.category.id === selectedCategory)
+  );
 
-    let cancelled = false;
-    (async () => {
-      locationProceduresLogger.debug('Searching procedures on server', {
-        query: q || undefined,
-        category: selectedCategory || undefined,
-        locationId
-      });
-      setLoading(true);
-      try {
-        const params: any = { locationId };
-        if (q)               params.query      = q;
-        if (selectedCategory) params.categoryId = selectedCategory;
-        // searchApi returns an array of templates ({ id,name,description,category })
-        const raw = await searchApi.searchProcedures(params);
-        // wrap each template in your Procedure shape (with a placeholder price)
-        const normalized = raw.map(item => ({
-          id: item.id,             // ← use the price‐record id
-          price: item.price,
-          template: item.procedure  // or p.template, if you’re normalizing both shapes
-        }));
-        if (!cancelled) setProcedures(normalized);
-      } catch (err) {
-        locationProceduresLogger.error('Server search failed', err);
-        if (!cancelled) setProcedures([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [searchTerm, selectedCategory, locationId]);
+  const sortedProcedures = [...filteredProcedures].sort((a, b) => {
+    const m = sortDirection === 'asc' ? 1 : -1;
+    if (sortField === 'name') return m * (a.template?.name || '').localeCompare(b.template?.name || '');
+    if (sortField === 'price') return m * (a.price - b.price);
+    return m * ((a.template?.category?.name || '').localeCompare(b.template?.category?.name || ''));
+  });
   
   // Log when filter criteria change
   useEffect(() => {
@@ -251,15 +195,6 @@ export default function ProceduresPage() {
       });
     }
   }, [searchTerm, selectedCategory, sortField, sortDirection, loading]);
-  
-  // Get sorted and filtered procedures
-  // The server already applied text + category filters.
-  const sortedProcedures = [...procedures].sort((a, b) => {
-    const m = sortDirection === 'asc' ? 1 : -1;
-    if (sortField === 'name') return m * (a.template?.name || '').localeCompare(b.template?.name || '');
-    if (sortField === 'price') return m * (a.price - b.price);
-    return m * ((a.template?.category?.name || '').localeCompare(b.template?.category?.name || ''));
-  });
   
   // Log any filtering results
   useEffect(() => {
