@@ -1,0 +1,12 @@
+
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@packages/database": ["packages/database"],
+      "@packages/common": ["packages/common"],
+      "@packages/logger": ["packages/logger"],
+      "@packages/ui": ["packages/ui"]
+    }
+  }
+}

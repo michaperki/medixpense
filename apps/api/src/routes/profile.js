@@ -7,7 +7,7 @@ import {
   updateProviderProfile,
   uploadProviderLogo,
   getPublicProviderProfile 
-} from '../controllers/profileController.js';
+} from '../controllers/profileController';
 import multer from 'multer';
 
 // Set up multer for file uploads

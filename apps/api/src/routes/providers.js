@@ -6,7 +6,7 @@ import {
   getProviderProcedures,
   getProviderById, // Public method for getting provider details
   getSpecialties
-} from '../controllers/providersController.js';
+} from '../controllers/providersController';
 
 const router = express.Router();
 

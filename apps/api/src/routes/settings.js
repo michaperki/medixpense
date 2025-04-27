@@ -12,7 +12,7 @@ import {
   enableTwoFactor,
   verifyTwoFactor,
   disableTwoFactor
-} from '../controllers/settingsController.js';
+} from '../controllers/settingsController';
 
 const router = express.Router();
 

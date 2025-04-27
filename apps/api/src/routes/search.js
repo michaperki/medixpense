@@ -5,7 +5,7 @@ import {
   getProcedures,
   getStats,
   getProviders
-} from '../controllers/searchController.js';
+} from '../controllers/searchController';
 
 const router = express.Router();
 

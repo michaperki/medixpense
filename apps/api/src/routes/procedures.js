@@ -11,7 +11,7 @@ import {
   updateProcedurePrice,
   deleteProcedurePrice,
   getProcedureById // Import our new controller function
-} from '../controllers/proceduresController.js';
+} from '../controllers/proceduresController';
 
 const router = express.Router();
 

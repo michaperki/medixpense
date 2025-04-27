@@ -6,8 +6,8 @@ import {
   getLocationById,
   updateLocation,
   deleteLocation
-} from '../controllers/locationsController.js';
-import { getProceduresByLocation } from '../controllers/proceduresController.js';
+} from '../controllers/locationsController';
+import { getProceduresByLocation } from '../controllers/proceduresController';
 import { verifyToken, checkRole, checkSubscription } from '../middleware/auth.js';
 
 const router = express.Router();

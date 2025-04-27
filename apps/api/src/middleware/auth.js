@@ -1,8 +1,6 @@
 // apps/api/src/middleware/auth.js
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@packages/database'
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET) {
