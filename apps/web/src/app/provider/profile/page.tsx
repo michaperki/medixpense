@@ -1,4 +1,5 @@
-"use client";
+
+'use client';
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -9,6 +10,7 @@ import { ErrorAlert } from "@/components/ui/ErrorAlert";
 import ProfileForm from "@/components/profile/ProfileForm";
 import { profileApi } from "@/services/profileService";
 import { useToast } from "@/hooks/useToast";
+import { handleApiError } from "@/lib/api/handleApiError"; // Import centralized error handler
 
 // Create a profile-specific logger
 const profileLogger = getLogger(LogContext.RENDER);
@@ -71,7 +73,7 @@ export default function ProfilePage() {
       setProfile(data);
       setError(null);
     } catch (err) {
-      profileLogger.error('Failed to load profile', err);
+      handleApiError(err, 'loadProfile'); // Centralized error handling
       setError(err.message || "Failed to load profile data");
       showToast({
         type: "error",
@@ -106,10 +108,7 @@ export default function ProfilePage() {
         message: "Profile updated successfully",
       });
     } catch (err) {
-      profileLogger.error('Failed to update profile', {
-        error: err
-      });
-      
+      handleApiError(err, 'handleSubmit'); // Centralized error handling
       setError(err.message || "Failed to update profile");
       showToast({
         type: "error",
@@ -153,3 +152,4 @@ export default function ProfilePage() {
     </div>
   );
 }
+

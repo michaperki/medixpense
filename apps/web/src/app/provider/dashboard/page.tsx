@@ -1,5 +1,4 @@
 
-// --- Cleaned ProviderDashboard.tsx ---
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -7,6 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/app/context/AuthContext';
 import { locationsApi, proceduresApi } from '@/lib/api';
 import { getLogger, LogContext, cfg } from '@/lib/logger';
+import { useToast } from '@/hooks/useToast';  // Import useToast
 import {
   MapPinIcon,
   ClipboardDocumentListIcon,
@@ -18,6 +18,7 @@ const log = getLogger(LogContext.RENDER);
 
 export default function ProviderDashboard() {
   const { user } = useAuth();
+  const { showToast } = useToast();  // Use showToast for error toasts
   const [stats, setStats] = useState({ locations: 0, procedures: 0, views: 0, searchImpressions: 0 });
   const [recentLocations, setRecentLocations] = useState<any[]>([]);
   const [topProcedures, setTopProcedures] = useState<any[]>([]);
@@ -25,7 +26,6 @@ export default function ProviderDashboard() {
 
   const ran = useRef(false);
 
-  // Replace the useEffect in ProviderDashboard with this implementation
   useEffect(() => {
     if (ran.current || !user) return;
     ran.current = true;
@@ -77,12 +77,14 @@ export default function ProviderDashboard() {
         });
       } catch (err) {
         log.error('Dashboard data fetch failed', err);
+        // Trigger an error toast when fetching fails
+        showToast('Failed to load dashboard data. Please try again.', 'error');
       } finally {
         setLoading(false);
         dashboardTimer.done();
       }
     })();
-  }, [user]);
+  }, [user, showToast]);
 
   if (loading) {
     return (

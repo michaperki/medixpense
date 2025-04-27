@@ -1,5 +1,6 @@
-// src/services/settingsService.ts
+
 import apiClient from '@/lib/apiClient';
+import { handleApiError } from '@/lib/api/handleApiError';
 
 // Types
 export interface GeneralSettings {
@@ -45,27 +46,33 @@ export interface ChangePasswordRequest {
 // Settings Service Class
 export class SettingsService {
   async getProviderSettings(): Promise<ProviderSettings> {
-    return apiClient.get<ProviderSettings>('/settings/provider');
+    return apiClient.get<ProviderSettings>('/settings/provider')
+      .catch((error) => handleApiError(error, 'getProviderSettings'));
   }
 
   async updateProviderSettings(data: UpdateSettingsRequest): Promise<ProviderSettings> {
-    return apiClient.put<ProviderSettings>('/settings/provider', data);
+    return apiClient.put<ProviderSettings>('/settings/provider', data)
+      .catch((error) => handleApiError(error, 'updateProviderSettings'));
   }
 
   async changePassword(data: ChangePasswordRequest): Promise<{ success: boolean }> {
-    return apiClient.post<{ success: boolean }>('/settings/change-password', data);
+    return apiClient.post<{ success: boolean }>('/settings/change-password', data)
+      .catch((error) => handleApiError(error, 'changePassword'));
   }
 
   async enableTwoFactor(): Promise<{ setupCode: string }> {
-    return apiClient.post<{ setupCode: string }>('/settings/two-factor/enable');
+    return apiClient.post<{ setupCode: string }>('/settings/two-factor/enable')
+      .catch((error) => handleApiError(error, 'enableTwoFactor'));
   }
 
   async verifyTwoFactor(code: string): Promise<{ success: boolean }> {
-    return apiClient.post<{ success: boolean }>('/settings/two-factor/verify', { code });
+    return apiClient.post<{ success: boolean }>('/settings/two-factor/verify', { code })
+      .catch((error) => handleApiError(error, 'verifyTwoFactor'));
   }
 
   async disableTwoFactor(): Promise<{ success: boolean }> {
-    return apiClient.post<{ success: boolean }>('/settings/two-factor/disable');
+    return apiClient.post<{ success: boolean }>('/settings/two-factor/disable')
+      .catch((error) => handleApiError(error, 'disableTwoFactor'));
   }
 }
 
@@ -82,3 +89,4 @@ export const settingsApi = {
 };
 
 export default settingsApi;
+

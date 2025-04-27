@@ -1,6 +1,6 @@
+
 import apiClient from './apiClient';
 import { getLogger } from '@/lib/logger';
-
 import { authService } from '@/services/authService';
 import locationService from '@/services/locationService';
 import { procedureService } from '@/services/procedureService';
@@ -16,63 +16,63 @@ const notificationLogger = getLogger('notification');
 
 // ─── AUTH ────────────────────────────────────────────────────────
 export const authApi = {
-  login: async (email: string, password: string) => {
+  login: (email: string, password: string) => {
     authLogger.with({ email }).info('Attempt login');
     return apiClient.post('/auth/login', { email, password });
   },
-  register: async (data: any) => {
+  register: (data: any) => {
     authLogger.with({ email: data.email }).info('Attempt register');
     return apiClient.post('/auth/register', data);
   },
-  me: async () => {
+  me: () => {
     authLogger.info('Fetch current user');
     return apiClient.get('/auth/me');
   },
-  logout: (...args: any[]) => {
+  logout: () => {
     authLogger.info('Logout');
-    return authService?.logout(...args);
+    return authService?.logout();
   },
-  getCurrentUser: (...args: any[]) => {
+  getCurrentUser: () => {
     authLogger.debug('Get cached user');
-    return authService?.getCurrentUser(...args);
+    return authService?.getCurrentUser();
   },
-  updateProfile: async (data: any, ...args: any[]) => {
+  updateProfile: (data: any) => {
     authLogger.info('Profile update');
-    return authService?.updateProfile(data, ...args);
+    return authService?.updateProfile(data);
   },
-  requestPasswordReset: async (email: string, ...args: any[]) => {
+  requestPasswordReset: (email: string) => {
     authLogger.with({ email }).info('Password reset request');
-    return authService?.requestPasswordReset(email, ...args);
+    return authService?.requestPasswordReset(email);
   },
-  resetPassword: async (token: string, ...args: any[]) => {
+  resetPassword: (token: string) => {
     authLogger.with({ token }).info('Password reset');
-    return authService?.resetPassword(token, ...args);
+    return authService?.resetPassword(token);
   },
-  verifyEmail: async (token: string, ...args: any[]) => {
+  verifyEmail: (token: string) => {
     authLogger.with({ token }).info('Verify email');
-    return authService?.verifyEmail(token, ...args);
+    return authService?.verifyEmail(token);
   },
 };
 
 // ─── LOCATIONS ───────────────────────────────────────────────────
 export const locationsApi = {
-  getAll: async (page = 1, limit = 10) => {
+  getAll: (page = 1, limit = 10) => {
     locationLogger.with({ page, limit }).debug('Get all');
     return apiClient.get('/locations', { params: { page, limit } });
   },
-  getById: async (id: string) => {
+  getById: (id: string) => {
     locationLogger.with({ id }).debug('Get by ID');
     return locationService.getById(id);
   },
-  create: async (data: any) => {
+  create: (data: any) => {
     locationLogger.with({ name: data.name }).info('Create');
     return apiClient.post('/locations', data);
   },
-  update: async (id: string, data: any) => {
+  update: (id: string, data: any) => {
     locationLogger.with({ id }).info('Update');
     return apiClient.put(`/locations/${id}`, data);
   },
-  delete: async (id: string) => {
+  delete: (id: string) => {
     locationLogger.with({ id }).info('Delete');
     return apiClient.delete(`/locations/${id}`);
   },
@@ -80,44 +80,43 @@ export const locationsApi = {
 
 // ─── PROCEDURES ──────────────────────────────────────────────────
 export const proceduresApi = {
-  getCategories: async () => {
+  getCategories: () => {
     procedureLogger.debug('Get categories');
     return procedureService.getCategories();
   },
-  getTemplates: async (params?: any) => {
+  getTemplates: (params?: any) => {
     procedureLogger.debug('Get templates', params);
     return procedureService.getTemplates(params);
   },
-  getProviderProcedures: async (providerId?: string, params?: any) => {
+  getProviderProcedures: (providerId?: string, params?: any) => {
     procedureLogger.with({ providerId }).debug('Get provider procedures');
     return procedureService.getProviderProcedures({ providerId, ...params });
   },
-  getProcedureById: async (id: string) => {
+  getProcedureById: (id: string) => {
     procedureLogger.with({ id }).debug('Get procedure by ID');
     return procedureService.getProcedureById(id);
   },
-  getProceduresByLocation: async (locationId: string) => {
+  getProceduresByLocation: (locationId: string) => {
     procedureLogger.with({ locationId }).debug('Get procedures by location');
-    const res = await apiClient.get(`/locations/${locationId}/procedures`);
-    return res.procedures;
+    return apiClient.get(`/locations/${locationId}/procedures`);
   },
-  addPrice: async (data: any) => {
+  addPrice: (data: any) => {
     procedureLogger.with({ templateId: data.templateId }).info('Add price');
     return procedureService.addPrice(data);
   },
-  updatePrice: async (id: string, data: any) => {
+  updatePrice: (id: string, data: any) => {
     procedureLogger.with({ id }).info('Update price');
     return procedureService.updatePrice(id, data);
   },
-  deletePrice: async (id: string) => {
+  deletePrice: (id: string) => {
     procedureLogger.with({ id }).info('Delete price');
     return procedureService.deletePrice(id);
   },
-  bulkUpdatePrices: async (procedureIds: string[], percentageChange: number) => {
+  bulkUpdatePrices: (procedureIds: string[], percentageChange: number) => {
     procedureLogger.with({ count: procedureIds.length }).info('Bulk price update');
     return procedureService.bulkUpdatePrices({ procedureIds, percentageChange });
   },
-  getPriceStats: async (templateId: string, params?: any) => {
+  getPriceStats: (templateId: string, params?: any) => {
     procedureLogger.with({ templateId }).debug('Get price stats');
     return procedureService.getPriceStats(templateId, params);
   },
@@ -125,14 +124,14 @@ export const proceduresApi = {
 
 // ─── SEARCH ──────────────────────────────────────────────────────
 export const searchApi = {
-  searchProcedures: async (params: any): Promise<SearchResponse> => {
+  searchProcedures: (params: any) => {
     return apiClient.get<SearchResponse>('/search/procedures', { params });
   },
-  getStats: async (templateId: string, params?: any) => {
+  getStats: (templateId: string, params?: any) => {
     searchLogger.with({ templateId }).debug('Get stats');
     return apiClient.get(`/search/stats/${templateId}`, { params });
   },
-  searchProviders: async (params: any) => {
+  searchProviders: (params: any) => {
     searchLogger.with(params).info('Search providers');
     return apiClient.get('/search/providers', { params });
   },
@@ -148,23 +147,23 @@ export const searchApi = {
 
 // ─── NOTIFICATIONS ───────────────────────────────────────────────
 export const notificationsApi = {
-  getAll: async (...args: any[]) => {
+  getAll: (...args: any[]) => {
     notificationLogger.debug('Get all notifications');
     return notificationService?.getAll(...args);
   },
-  getUnread: async (...args: any[]) => {
+  getUnread: (...args: any[]) => {
     notificationLogger.debug('Get unread notifications');
     return notificationService?.getUnread(...args);
   },
-  markAsRead: async (id: string, ...args: any[]) => {
+  markAsRead: (id: string, ...args: any[]) => {
     notificationLogger.with({ id }).info('Mark as read');
     return notificationService?.markAsRead(id, ...args);
   },
-  markAllAsRead: async (...args: any[]) => {
+  markAllAsRead: (...args: any[]) => {
     notificationLogger.info('Mark all as read');
     return notificationService?.markAllAsRead(...args);
   },
-  delete: async (id: string, ...args: any[]) => {
+  delete: (id: string, ...args: any[]) => {
     notificationLogger.with({ id }).info('Delete notification');
     return notificationService?.delete(id, ...args);
   },
@@ -172,7 +171,7 @@ export const notificationsApi = {
 
 // ─── API EXPORT ──────────────────────────────────────────────────
 export const api = {
-  client: apiClient, // 👈 expose the singleton client here
+  client: apiClient,
   auth: authApi,
   locations: locationsApi,
   procedures: proceduresApi,
@@ -181,3 +180,4 @@ export const api = {
 };
 
 export default api;
+

@@ -1,13 +1,16 @@
+
 'use client';
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
+import { useToast } from '@/hooks/useToast';  // Import the useToast hook
 
 export default function RegisterPage() {
   const router = useRouter();
   const { register } = useAuth();
+  const { showToast } = useToast();  // Use the showToast function
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' });
-  const [error, setError] = useState('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [e.target.name]: e.target.value }));
@@ -18,7 +21,7 @@ export default function RegisterPage() {
       await register(form);
       router.push('/provider/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Registration failed');
+      showToast(err.message || 'Registration failed', 'error');  // Show error toast
     }
   };
 
@@ -30,12 +33,6 @@ export default function RegisterPage() {
         </div>
         
         <div className="card-body">
-          {error && (
-            <div className="alert alert-error mb-4">
-              <p className="alert-message">{error}</p>
-            </div>
-          )}
-          
           <form onSubmit={handleSubmit}>
             <div className="form-row">
               <div className="form-col form-group">
@@ -105,3 +102,4 @@ export default function RegisterPage() {
     </div>
   );
 }
+

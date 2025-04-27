@@ -1,9 +1,10 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { proceduresApi } from '@/lib/api';
-import { useToast } from '@/hooks/useToast';
+import { useToast } from '@/hooks/useToast'; // Import the useToast hook
 import { getLogger, LogContext } from '@/lib/logger';
 import { 
   ArrowLeftIcon,
@@ -48,7 +49,7 @@ type PriceStats = {
 export default function EditProcedurePage() {
   const params = useParams();
   const router = useRouter();
-  const { showToast } = useToast();
+  const { showToast } = useToast();  // Use the showToast function
   const procedureId = params.procedureId as string;
   
   // State
@@ -97,6 +98,7 @@ export default function EditProcedurePage() {
       } catch (err) {
         editProcedureLogger.error('Failed to fetch procedure', { procedureId, error: err });
         setError('Failed to load procedure. Please try again later.');
+        showToast('Failed to load procedure. Please try again later.', 'error');  // Show error toast
       } finally {
         setLoading(false);
       }
@@ -209,7 +211,7 @@ export default function EditProcedurePage() {
       });
       
       const errorMessage = err.message || 'Failed to update procedure price';
-      showToast(errorMessage, 'error');
+      showToast(errorMessage, 'error');  // Show error toast
     } finally {
       setIsSubmitting(false);
     }
@@ -426,3 +428,4 @@ export default function EditProcedurePage() {
     </div>
   );
 }
+

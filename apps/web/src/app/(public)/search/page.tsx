@@ -1,12 +1,4 @@
 
-// src/app/(public)/search/page.tsx – unified (list + map)
-// -----------------------------------------------------------------------------
-// • Keeps the existing search-form UX you like.
-// • Replaces the old “results” page — a toggle shows the map without navigating
-//   away, so you don’t lose scroll position or filters.
-// • HandleSearch now pushes to `/search` (same route) → true SPA feel.
-// -----------------------------------------------------------------------------
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -14,6 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { searchApi, proceduresApi } from '@/lib/api';
+import { handleApiError } from '@/lib/api/handleApiError'; 
 import {
   MagnifyingGlassIcon,
   MapPinIcon,
@@ -82,7 +75,7 @@ export default function SearchPage() {
    * Fetch categories once
    * ---------------------------------------------------------- */
   useEffect(() => {
-    proceduresApi.getCategories().then((res) => setCategories(res.categories)).catch(console.error);
+    proceduresApi.getCategories().then((res) => setCategories(res.categories)).catch((err) => handleApiError(err, 'fetchCategories')); // Centralized error handling
   }, []);
 
   /* ------------------------------------------------------------
@@ -129,7 +122,7 @@ export default function SearchPage() {
           setMapCenter({ lat: res.data.searchLocation.latitude, lng: res.data.searchLocation.longitude });
         }
       } catch (err) {
-        console.error(err);
+        handleApiError(err, 'searchProcedures'); // Centralized error handling
         setError('Something went wrong. Please try again.');
       } finally {
         setLoading(false);
@@ -168,9 +161,7 @@ export default function SearchPage() {
    * ---------------------------------------------------------- */
   return (
     <div className="bg-white">
-      {/* ----------------------------------------------------- */}
       {/* SEARCH BAR */}
-      {/* ----------------------------------------------------- */}
       <div className="bg-primary">
         <div className="container py-6">
           <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-5">
@@ -183,9 +174,8 @@ export default function SearchPage() {
                 value={procedure}
                 onChange={e => setProcedure(e.target.value)}
                 placeholder="MRI, CT…"
+                style={{ paddingLeft: '2rem' }} // ✅ Apply here
                 className="form-input pl-10"
-              style={{ paddingLeft: '2rem' }}
-                style={{ color: 'var(--color-gray-800)', paddingLeft: '2rem'  }}
               />
             </div>
             {/* location */}
@@ -197,8 +187,8 @@ export default function SearchPage() {
                 value={location}
                 onChange={e => setLocation(e.target.value)}
                 placeholder="ZIP or City"
+                style={{ paddingLeft: '2rem' }} // ✅ Apply here
                 className="form-input pl-10"
-                style={{ color: 'var(--color-gray-800)', paddingLeft: '2rem'  }}
               />
             </div>
             {/* category */}
@@ -209,7 +199,6 @@ export default function SearchPage() {
                 value={categoryId}
                 onChange={e => setCategoryId(e.target.value)}
                 className="form-select"
-                style={{ color: 'var(--color-gray-800)' }}
               >
                 <option value="">All</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -225,11 +214,8 @@ export default function SearchPage() {
         </div>
       </div>
 
-      {/* ----------------------------------------------------- */}
       {/* RESULTS */}
-      {/* ----------------------------------------------------- */}
       <div className="container py-8">
-        {/* header */}
         {results.length > 0 && (
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-medium text-gray-800">
@@ -246,14 +232,12 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* states */}
         {error && <div className="alert alert-error mb-4">{error}</div>}
         {loading && <div className="loading-spinner"><div className="spinner spinner-md" /></div>}
         {!loading && !error && results.length === 0 && (
           <div className="text-center text-gray-600">No procedures found.</div>
         )}
 
-        {/* list */}
         {!loading && !error && results.length > 0 && viewMode === 'list' && (
           <div className="space-y-4">
             {results.map(r => (
@@ -279,7 +263,6 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* map */}
         {!loading && !error && results.length > 0 && viewMode === 'map' && (
           <div className="card" style={{ height: '70vh' }}>
             <ProcedureMap
@@ -291,7 +274,6 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* pagination */}
         {!loading && !error && pagination.pages > 1 && (
           <div className="flex justify-center items-center mt-6 space-x-4">
             <button onClick={() => handlePageChange(pagination.page - 1)} disabled={pagination.page === 1} className="icon-btn">

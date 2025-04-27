@@ -1,4 +1,5 @@
-"use client";
+
+'use client';
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -9,6 +10,7 @@ import { ErrorAlert } from "@/components/ui/ErrorAlert";
 import SettingsForm from "@/components/settings/SettingsForm";
 import { settingsApi } from "@/services/settingsService";
 import { useToast } from "@/hooks/useToast";
+import { handleApiError } from "@/lib/api/handleApiError";  // <-- Import handleApiError for consistent error handling
 
 // Create a settings-specific logger
 const settingsLogger = getLogger(LogContext.RENDER);
@@ -72,7 +74,7 @@ export default function SettingsPage() {
       setSettings(data);
       setError(null);
     } catch (err) {
-      settingsLogger.error('Failed to load settings', err);
+      handleApiError(err, 'loadSettings');  // Centralized error handling
       setError(err.message || "Failed to load settings data");
       showToast({
         type: "error",
@@ -112,11 +114,7 @@ export default function SettingsPage() {
         message: "Settings updated successfully",
       });
     } catch (err) {
-      settingsLogger.error('Failed to update settings', {
-        settingsType: activeTab,
-        error: err
-      });
-      
+      handleApiError(err, 'handleSubmit');  // Centralized error handling
       setError(err.message || "Failed to update settings");
       showToast({
         type: "error",
@@ -190,3 +188,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+

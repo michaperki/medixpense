@@ -1,28 +1,30 @@
+
 'use client';
+
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
+import { useToast } from '@/hooks/useToast';  // Import the useToast hook
 
 export default function LoginPage() {
   const router = useRouter();
   const params = useSearchParams();
   const { login } = useAuth();
+  const { showToast } = useToast();  // Use the showToast function
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     try {
       await login(email, password);
       const redirect = params.get('redirect') || '/provider/dashboard';
       router.push(redirect);
     } catch (err: any) {
       if (err.response?.data?.errors?.length) {
-        setError(err.response.data.errors[0].msg);
+        showToast(err.response.data.errors[0].msg, 'error');  // Show error toast
       } else {
-        setError(err.message || 'Login failed');
+        showToast(err.message || 'Login failed', 'error');  // Show error toast
       }
     }
   };
@@ -33,8 +35,6 @@ export default function LoginPage() {
         <h2 className="text-center text-2xl mb-6">Login</h2>
         
         <form onSubmit={handleSubmit}>
-          {error && <p className="text-danger mb-4">{error}</p>}
-          
           <div className="mb-4">
             <label htmlFor="email" className="block mb-2 text-muted">Email</label>
             <input
@@ -75,3 +75,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

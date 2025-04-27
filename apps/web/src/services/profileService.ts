@@ -1,5 +1,6 @@
-// src/services/profileService.ts
+
 import apiClient from '@/lib/apiClient';
+import { handleApiError } from '@/lib/api/handleApiError';
 
 // Types
 export interface ProviderProfile {
@@ -35,22 +36,26 @@ export interface UpdateProfileRequest {
 // Profile Service Class
 export class ProfileService {
   async getProviderProfile(): Promise<ProviderProfile> {
-    return apiClient.get<ProviderProfile>('/profile/provider');
+    return apiClient.get<ProviderProfile>('/profile/provider')
+      .catch((error) => handleApiError(error, 'getProviderProfile'));
   }
 
   async updateProviderProfile(data: UpdateProfileRequest): Promise<ProviderProfile> {
-    return apiClient.put<ProviderProfile>('/profile/provider', data);
+    return apiClient.put<ProviderProfile>('/profile/provider', data)
+      .catch((error) => handleApiError(error, 'updateProviderProfile'));
   }
 
   async uploadLogo(file: File): Promise<{ logoUrl: string }> {
     const formData = new FormData();
     formData.append('logo', file);
     
-    return apiClient.uploadFile<{ logoUrl: string }>('/profile/provider/logo', formData);
+    return apiClient.uploadFile<{ logoUrl: string }>('/profile/provider/logo', formData)
+      .catch((error) => handleApiError(error, 'uploadLogo'));
   }
 
   async getPublicProfile(providerId: string): Promise<ProviderProfile> {
-    return apiClient.get<ProviderProfile>(`/profile/provider/${providerId}/public`);
+    return apiClient.get<ProviderProfile>(`/profile/provider/${providerId}/public`)
+      .catch((error) => handleApiError(error, 'getPublicProfile'));
   }
 }
 
@@ -65,3 +70,4 @@ export const profileApi = {
 };
 
 export default profileApi;
+

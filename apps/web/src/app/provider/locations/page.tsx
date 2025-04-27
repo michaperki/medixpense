@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
@@ -5,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/useToast';
 import { locationService, type Location } from '@/services';
 import { getLogger, LogContext } from '@/lib/logger';
+import { handleApiError } from '@/lib/api/handleApiError'; // Import error handler
 import {
   PlusIcon,
   PencilIcon,
@@ -21,7 +23,7 @@ const LIMIT = 10;
 
 export default function LocationsPage() {
   const router = useRouter();
-  const { showToast } = useToast();
+  const { showToast } = useToast(); // You still need this for manual toasts like success
   const [page, setPage] = useState(1);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [locationToDelete, setLocationToDelete] = useState<Location | null>(null);
@@ -43,7 +45,7 @@ export default function LocationsPage() {
       timer.done();
     } catch (err) {
       timer.fail(err);
-      throw err;
+      handleApiError(err, 'fetchLocations');  // Automatically handles error logging and toasts
     }
   }
 
@@ -54,27 +56,19 @@ export default function LocationsPage() {
     const pageTimer = log.timer('LocationsPage boot');
     setIsLoading(true);
     fetchLocations(1)
-      .catch(err => {
-        log.error('Failed to fetch initial locations', err);
-        showToast(`Error loading locations: ${(err as Error).message}`, 'error');
-      })
       .finally(() => {
         setIsLoading(false);
         pageTimer.done();
       });
-  }, [showToast]);
+  }, []);
 
   const handlePageChange = useCallback((newPage: number) => {
     log.info('Page change requested', { from: page, to: newPage });
     setIsLoading(true);
     setPage(newPage);
     fetchLocations(newPage)
-      .catch(err => {
-        log.error('Failed to change page', err);
-        showToast(`Error: ${(err as Error).message}`, 'error');
-      })
       .finally(() => setIsLoading(false));
-  }, [page, showToast]);
+  }, [page]);
 
   const handleDeleteLocation = async (id: string) => {
     const timer = log.timer('Delete location');
@@ -87,7 +81,7 @@ export default function LocationsPage() {
     } catch (err) {
       timer.fail(err);
       log.error('Delete failed', err);
-      showToast(`Error: ${(err as Error).message}`, 'error');
+      handleApiError(err, 'handleDeleteLocation');  // Automatically handles error logging and toasts
     } finally {
       setIsLoading(false);
       setDeleteModalOpen(false);
@@ -135,7 +129,7 @@ export default function LocationsPage() {
           </Link>
         </div>
       </div>
-      
+
       {isLoading && locations.length === 0 ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
@@ -148,7 +142,7 @@ export default function LocationsPage() {
             Get started by adding your first healthcare location.
           </p>
           <div className="mt-6">
-            <Link 
+            <Link
               href="/provider/locations/new"
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
@@ -173,9 +167,7 @@ export default function LocationsPage() {
                           <div className="mt-2 flex items-center text-sm text-gray-500">
                             <MapPinIcon className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" />
                             <p>
-                              {location.address1}, 
-                              {location.address2 ? ` ${location.address2},` : ''} 
-                              {' '}{location.city}, {location.state} {location.zipCode}
+                              {location.address1}, {location.city}, {location.state} {location.zipCode}
                             </p>
                           </div>
                         </div>
@@ -192,14 +184,14 @@ export default function LocationsPage() {
                     </div>
                     <div className="mt-4 sm:flex sm:justify-end">
                       <div className="flex space-x-3">
-                        <Link 
+                        <Link
                           href={`/provider/locations/${location.id}/procedures`}
                           className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                         >
                           <ClipboardDocumentListIcon className="-ml-0.5 mr-2 h-4 w-4" />
                           Manage Procedures
                         </Link>
-                        <Link 
+                        <Link
                           href={`/provider/locations/${location.id}`}
                           className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                         >
@@ -240,133 +232,11 @@ export default function LocationsPage() {
                   Next
                 </button>
               </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-gray-700">
-                    Showing <span className="font-medium">{(page - 1) * limit + 1}</span> to{' '}
-                    <span className="font-medium">
-                      {Math.min(page * limit, pagination.total)}
-                    </span>{' '}
-                    of <span className="font-medium">{pagination.total}</span> results
-                  </p>
-                </div>
-                <div>
-                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                    <button
-                      onClick={() => handlePageChange(Math.max(1, page - 1))}
-                      disabled={page === 1 || isLoading}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      <span className="sr-only">Previous</span>
-                      <ArrowLeftIcon className="h-5 w-5" />
-                    </button>
-                    
-                    {/* Page Numbers */}
-                    {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
-                      let pageNumber;
-                      if (pagination.pages <= 5) {
-                        // Display all pages if 5 or fewer
-                        pageNumber = i + 1;
-                      } else if (page <= 3) {
-                        // If near start, show first 5 pages
-                        pageNumber = i + 1;
-                      } else if (page >= pagination.pages - 2) {
-                        // If near end, show last 5 pages
-                        pageNumber = pagination.pages - 4 + i;
-                      } else {
-                        // Otherwise show 2 before and 2 after current page
-                        pageNumber = page - 2 + i;
-                      }
-                      
-                      return (
-                        <button
-                          key={pageNumber}
-                          onClick={() => handlePageChange(pageNumber)}
-                          disabled={isLoading}
-                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                            page === pageNumber
-                              ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                              : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                          }`}
-                        >
-                          {pageNumber}
-                        </button>
-                      );
-                    })}
-                    
-                    <button
-                      onClick={() => handlePageChange(Math.min(pagination.pages, page + 1))}
-                      disabled={page === pagination.pages || isLoading}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      <span className="sr-only">Next</span>
-                      <ArrowRightIcon className="h-5 w-5" />
-                    </button>
-                  </nav>
-                </div>
-              </div>
             </div>
           )}
         </>
       )}
-      
-      {/* Delete Confirmation Modal */}
-      {deleteModalOpen && (
-        <div className="fixed z-10 inset-0 overflow-y-auto">
-          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
-            </div>
-            
-            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <div className="sm:flex sm:items-start">
-                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-                    <TrashIcon className="h-6 w-6 text-red-600" />
-                  </div>
-                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                    <h3 className="text-lg leading-6 font-medium text-gray-900">
-                      Delete Location
-                    </h3>
-                    <div className="mt-2">
-                      <p className="text-sm text-gray-500">
-                        Are you sure you want to delete <span className="font-medium">{locationToDelete?.name}</span>? This action cannot be undone and will also delete all procedures associated with this location.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  onClick={handleConfirmDelete}
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
-                >
-                  {isLoading ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Deleting...
-                    </>
-                  ) : 'Delete'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCancelDelete}
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
+

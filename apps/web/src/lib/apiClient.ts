@@ -1,6 +1,7 @@
 
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
 import { apiLogger, createReqId, cfg } from '@/lib/logger';
+import { handleApiError } from '@/lib/api/handleApiError'; // Add centralized error handling
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -30,6 +31,7 @@ class ApiClient {
   }
 
   private setupInterceptors() {
+    // Request Interceptor
     this.client.interceptors.request.use((config) => {
       const reqId = createReqId('R');
       config.headers = config.headers || {};
@@ -44,21 +46,20 @@ class ApiClient {
       
       // Simplified logging - just a single line with minimal context
       apiLogger.info(`▶️ ${reqId} ${config.method?.toUpperCase()} ${config.url}`, {
-        // Only show params and data if they're small enough to be meaningful
         params: this.summarize(config.params),
         data: this.summarize(config.data),
       });
       
       return config;
     });
-    
+
+    // Response Interceptor
     this.client.interceptors.response.use(
       (res) => {
         const { _reqId, _t0 } = res.config as any;
         const ms = Math.round(performance.now() - (_t0 || 0));
         const size = this.getSize(res.data);
         
-        // Single line response log with status, time and size
         apiLogger.info(`✅ ${_reqId} →${res.status} ${ms} ms ${size}`);
         
         return res;
@@ -69,6 +70,9 @@ class ApiClient {
         const ms = Math.round(performance.now() - (_t0 || 0));
         const status = error.response?.status || 500;
         const message = this.extractErrorMessage(error);
+        
+        // Pass the error to the centralized error handler
+        handleApiError(error, `${error.config.method?.toUpperCase()} ${error.config.url}`);
         
         // Concise error log
         apiLogger.warn(`❌ ${_reqId} →${status} ${ms} ms`, { message });

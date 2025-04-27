@@ -1,8 +1,8 @@
-// src/services/locationService.ts
+
 import apiClient from '@/lib/apiClient';
 import { getLogger } from '@/lib/logger';
+import { handleApiError } from '@/lib/api/handleApiError';
 
-// Create a location-specific logger
 const locationLogger = getLogger('location:service');
 
 export interface Location {
@@ -50,113 +50,75 @@ export interface LocationCreateData {
 }
 
 const locationService = {
-  // Get all locations with pagination
-  getAll: async (params: LocationParams = {}): Promise<LocationPaginatedResponse> => {
+  async getAll(params: LocationParams = {}): Promise<LocationPaginatedResponse> {
     const t = locationLogger.timer('Fetch all locations');
     try {
-      const result = await apiClient.get('/locations', { params });
+      const result = await apiClient.get<LocationPaginatedResponse>('/locations', { params });
       locationLogger.debug('Locations fetched successfully', { 
         count: result.locations?.length,
-        pagination: result.pagination
+        pagination: result.pagination,
       });
       t.done();
       return result;
     } catch (error) {
       t.fail(error);
-      throw error;
+      return handleApiError(error, 'getAllLocations');
     }
   },
-  
-  // Get a single location by ID
-  getById: async (id: string): Promise<Location> => {
+
+  async getById(id: string): Promise<Location> {
     locationLogger.debug('Fetching location by ID', { id });
-    
-    try {
-      const result = await apiClient.get(`/locations/${id}`);
-      locationLogger.debug('Raw response from API', { result }); // <-- Add this
-      const location = result?.location ?? result;
-
-      if (!location?.id) {
-        locationLogger.error('Invalid location response', { result }); // <-- Make sure this is here
-        throw new Error('Invalid location response');
-      }
-
-      locationLogger.debug('Location fetched successfully', { id, name: location.name });
-      return location;
-    } catch (error) {
-      locationLogger.error(`Failed to fetch location`, { id, error });
-      throw error;
-    }
+    return apiClient.get<{ location: Location }>(`/locations/${id}`)
+      .then((result) => {
+        const location = result.location ?? result;
+        if (!location?.id) {
+          locationLogger.error('Invalid location response', { result });
+          throw new Error('Invalid location response');
+        }
+        locationLogger.debug('Location fetched successfully', { id, name: location.name });
+        return location;
+      })
+      .catch((error) => handleApiError(error, 'getLocationById'));
   },
-  
-  // Create a new location
-  create: async (data: LocationCreateData): Promise<Location> => {
+
+  async create(data: LocationCreateData): Promise<Location> {
     locationLogger.info('Creating new location', { 
       name: data.name,
       city: data.city,
-      state: data.state
+      state: data.state,
     });
-    
-    try {
-      const result = await apiClient.post('/locations', data);
-      const location = result.location || result;
-      
-      locationLogger.info('Location created successfully', {
-        id: location.id,
-        name: location.name
-      });
-      
-      return location;
-    } catch (error) {
-      locationLogger.error('Failed to create location', { 
-        name: data.name,
-        error
-      });
-      throw error;
-    }
+    return apiClient.post<{ location: Location }>('/locations', data)
+      .then((result) => {
+        const location = result.location ?? result;
+        locationLogger.info('Location created successfully', {
+          id: location.id,
+          name: location.name,
+        });
+        return location;
+      })
+      .catch((error) => handleApiError(error, 'createLocation'));
   },
-  
-  // Update an existing location
-  update: async (id: string, data: Partial<LocationCreateData>): Promise<Location> => {
-    locationLogger.info('Updating location', { 
-      id,
-      fields: Object.keys(data)
-    });
-    
-    try {
-      const result = await apiClient.put(`/locations/${id}`, data);
-      const location = result.location || result;
-      
-      locationLogger.info('Location updated successfully', {
-        id,
-        name: location.name
-      });
-      
-      return location;
-    } catch (error) {
-      locationLogger.error('Failed to update location', {
-        id,
-        error
-      });
-      throw error;
-    }
+
+  async update(id: string, data: Partial<LocationCreateData>): Promise<Location> {
+    locationLogger.info('Updating location', { id, fields: Object.keys(data) });
+    return apiClient.put<{ location: Location }>(`/locations/${id}`, data)
+      .then((result) => {
+        const location = result.location ?? result;
+        locationLogger.info('Location updated successfully', { id, name: location.name });
+        return location;
+      })
+      .catch((error) => handleApiError(error, 'updateLocation'));
   },
-  
-  // Delete a location
-  delete: async (id: string): Promise<void> => {
+
+  async delete(id: string): Promise<void> {
     locationLogger.info('Deleting location', { id });
-    
-    try {
-      await apiClient.delete(`/locations/${id}`);
-      locationLogger.info('Location deleted successfully', { id });
-    } catch (error) {
-      locationLogger.error('Failed to delete location', {
-        id,
-        error
-      });
-      throw error;
-    }
-  }
+    return apiClient.delete<void>(`/locations/${id}`)
+      .then(() => {
+        locationLogger.info('Location deleted successfully', { id });
+      })
+      .catch((error) => handleApiError(error, 'deleteLocation'));
+  },
 };
 
 export default locationService;
+

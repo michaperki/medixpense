@@ -1,8 +1,8 @@
 
 import apiClient from '@/lib/apiClient';
 import { getLogger } from '@/lib/logger';
+import { handleApiError } from '@/lib/api/handleApiError';
 
-// Create a procedure-specific logger
 const procedureLogger = getLogger('procedure:service');
 
 // Types
@@ -105,161 +105,67 @@ export interface StatsResponse {
 
 // Procedure Service
 export class ProcedureService {
-  /**
-   * Get all available procedure categories
-   */
   async getCategories(): Promise<CategoriesResponse> {
     procedureLogger.debug('Fetching procedure categories');
-    try {
-      const result = await apiClient.get<CategoriesResponse>('/procedures/categories');
-      procedureLogger.debug('Categories fetched successfully', { count: result.categories?.length });
-      return result;
-    } catch (error) {
-      procedureLogger.error('Failed to fetch procedure categories', error);
-      throw error;
-    }
+    return apiClient.get<CategoriesResponse>('/procedures/categories')
+      .catch((error) => handleApiError(error, 'getCategories'));
   }
 
-  /**
-   * Get procedure templates with optional filtering
-   */
-  async getTemplates(params?: { 
-    query?: string;
-    categoryId?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<TemplatesResponse> {
+  async getTemplates(params?: { query?: string; categoryId?: string; page?: number; limit?: number; }): Promise<TemplatesResponse> {
     procedureLogger.debug('Fetching procedure templates', { params });
-    try {
-      const result = await apiClient.get<TemplatesResponse>('/procedures/templates', { params });
-      procedureLogger.debug('Templates fetched successfully', { count: result.templates?.length, pagination: result.pagination });
-      return result;
-    } catch (error) {
-      procedureLogger.error('Failed to fetch procedure templates', { params, error });
-      throw error;
-    }
+    return apiClient.get<TemplatesResponse>('/procedures/templates', { params })
+      .catch((error) => handleApiError(error, 'getTemplates'));
   }
 
-  /**
-   * Get all procedures for the current provider, optionally filtered by location
-   */
-  async getProviderProcedures(params?: {
-    locationId?: string;
-    categoryId?: string;
-    query?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<ProceduresResponse> {
+  async getProviderProcedures(params?: { locationId?: string; categoryId?: string; query?: string; page?: number; limit?: number; }): Promise<ProceduresResponse> {
     procedureLogger.debug('Fetching provider procedures', { params });
-    try {
-      const result = await apiClient.get<ProceduresResponse>('/procedures/provider', { params });
-      procedureLogger.debug('Provider procedures fetched successfully', { count: result.procedures?.length, pagination: result.pagination });
-      return result;
-    } catch (error) {
-      procedureLogger.error('Failed to fetch provider procedures', { params, error });
-      throw error;
-    }
+    return apiClient.get<ProceduresResponse>('/procedures/provider', { params })
+      .catch((error) => handleApiError(error, 'getProviderProcedures'));
   }
 
-  /**
-   * Get details for a specific procedure
-   */
   async getProcedureById(id: string): Promise<ProcedureResponse> {
     procedureLogger.debug('Fetching procedure by ID', { id });
-    try {
-      const result = await apiClient.get<ProcedureResponse>(`/procedures/${id}`);
-      procedureLogger.debug('Procedure fetched successfully', { id, templateName: result.procedure?.template?.name });
-      return result;
-    } catch (error) {
-      procedureLogger.error('Failed to fetch procedure', { id, error });
-      throw error;
-    }
+    return apiClient.get<ProcedureResponse>(`/procedures/${id}`)
+      .catch((error) => handleApiError(error, 'getProcedureById'));
   }
 
-  /**
-   * Add a new procedure price for a location
-   */
   async addPrice(data: CreateProcedureRequest): Promise<ProcedureResponse> {
-    procedureLogger.info('Adding new procedure price', { locationId: data.locationId, templateId: data.templateId, price: data.price });
-    try {
-      const result = await apiClient.post<ProcedureResponse>('/procedures/price', data);
-      procedureLogger.info('Procedure price added successfully', { id: result.procedure?.id, price: result.procedure?.price });
-      return result;
-    } catch (error) {
-      procedureLogger.error('Failed to add procedure price', { data, error });
-      throw error;
-    }
+    procedureLogger.info('Adding new procedure price', { data });
+    return apiClient.post<ProcedureResponse>('/procedures/price', data)
+      .catch((error) => handleApiError(error, 'addPrice'));
   }
 
-  /**
-   * Update the price of an existing procedure
-   */
   async updatePrice(id: string, data: UpdateProcedureRequest): Promise<ProcedureResponse> {
-    procedureLogger.info('Updating procedure price', { id, price: data.price });
-    try {
-      const result = await apiClient.put<ProcedureResponse>(`/procedures/price/${id}`, data);
-      procedureLogger.info('Procedure price updated successfully', { id, newPrice: data.price });
-      return result;
-    } catch (error) {
-      procedureLogger.error('Failed to update procedure price', { id, price: data.price, error });
-      throw error;
-    }
+    procedureLogger.info('Updating procedure price', { id, data });
+    return apiClient.put<ProcedureResponse>(`/procedures/price/${id}`, data)
+      .catch((error) => handleApiError(error, 'updatePrice'));
   }
 
-  /**
-   * Delete a procedure price
-   */
   async deletePrice(id: string): Promise<void> {
     procedureLogger.info('Deleting procedure price', { id });
-    try {
-      await apiClient.delete<void>(`/procedures/price/${id}`);
-      procedureLogger.info('Procedure price deleted successfully', { id });
-    } catch (error) {
-      procedureLogger.error('Failed to delete procedure price', { id, error });
-      throw error;
-    }
+    return apiClient.delete<void>(`/procedures/price/${id}`)
+      .catch((error) => handleApiError(error, 'deletePrice'));
   }
 
-  /**
-   * Bulk update procedure prices by percentage
-   */
   async bulkUpdatePrices(data: BulkUpdatePriceRequest): Promise<{ updatedCount: number }> {
-    procedureLogger.info('Bulk updating procedure prices', { count: data.procedureIds.length, percentageChange: data.percentageChange });
-    try {
-      const result = await apiClient.post<{ updatedCount: number }>('/procedures/price/bulk', data);
-      procedureLogger.info('Procedure prices updated successfully', { updatedCount: result.updatedCount, percentageChange: data.percentageChange });
-      return result;
-    } catch (error) {
-      procedureLogger.error('Failed to bulk update procedure prices', { count: data.procedureIds.length, percentageChange: data.percentageChange, error });
-      throw error;
-    }
+    procedureLogger.info('Bulk updating procedure prices', { data });
+    return apiClient.post<{ updatedCount: number }>('/procedures/price/bulk', data)
+      .catch((error) => handleApiError(error, 'bulkUpdatePrices'));
   }
 
-  /**
-   * Get price statistics for a procedure template in a geographic area
-   */
   async getPriceStats(templateId: string, params?: { locationId?: string; radius?: number }): Promise<StatsResponse> {
     procedureLogger.debug('Fetching price statistics', { templateId, params });
-    try {
-      const result = await apiClient.get<StatsResponse>(`/procedures/stats/${templateId}`, { params });
-      procedureLogger.debug('Price statistics fetched successfully', { templateId, min: result.stats?.min, max: result.stats?.max, average: result.stats?.average });
-      return result;
-    } catch (error) {
-      procedureLogger.error('Failed to fetch price statistics', { templateId, params, error });
-      throw error;
-    }
+    return apiClient.get<StatsResponse>(`/procedures/stats/${templateId}`, { params })
+      .catch((error) => handleApiError(error, 'getPriceStats'));
   }
 
-  /**
-   * @deprecated Use bulkUpdatePrices instead
-   */
+  /** @deprecated Use bulkUpdatePrices instead */
   async updatePrices(data: BulkUpdatePriceRequest): Promise<{ updatedCount: number }> {
-    procedureLogger.warn('Using deprecated updatePrices method', { count: data.procedureIds.length });
+    procedureLogger.warn('Using deprecated updatePrices method', { data });
     return this.bulkUpdatePrices(data);
   }
 }
 
-// Create and export the singleton instance
 export const procedureService = new ProcedureService();
 export default procedureService;
 
