@@ -14,8 +14,12 @@ CREATE TABLE "users" (
     "passwordHash" TEXT NOT NULL,
     "firstName" TEXT,
     "lastName" TEXT,
+    "phone" TEXT,
+    "profileImageUrl" TEXT,
     "role" "Role" NOT NULL DEFAULT 'PROVIDER',
     "status" "Status" NOT NULL DEFAULT 'ACTIVE',
+    "twoFactorEnabled" BOOLEAN NOT NULL DEFAULT false,
+    "twoFactorSecret" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "resetToken" TEXT,
@@ -33,13 +37,68 @@ CREATE TABLE "providers" (
     "website" TEXT,
     "bio" TEXT,
     "logoUrl" TEXT,
-    "stripeCustomerId" TEXT,
-    "subscriptionStatus" "SubscriptionStatus" NOT NULL DEFAULT 'INACTIVE',
+    "address" TEXT,
+    "city" TEXT,
+    "state" TEXT,
+    "zipCode" TEXT,
+    "subscriptionStatus" TEXT,
     "subscriptionTier" TEXT,
+    "specialties" JSONB,
+    "services" JSONB,
+    "insuranceAccepted" JSONB,
+    "mission" TEXT,
+    "email" TEXT,
+    "yearEstablished" INTEGER,
+    "licensingInfo" TEXT,
+    "reviewCount" INTEGER,
+    "rating" DOUBLE PRECISION,
+    "stripeCustomerId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "providers_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "provider_settings" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "general" TEXT,
+    "notifications" TEXT,
+    "security" TEXT,
+    "billing" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "provider_settings_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "admin_settings" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "dashboard" TEXT,
+    "notifications" TEXT,
+    "security" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "admin_settings_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "subscription_plans" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
+    "monthlyPrice" DOUBLE PRECISION NOT NULL,
+    "annualPrice" DOUBLE PRECISION NOT NULL,
+    "features" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "subscription_plans_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -56,6 +115,7 @@ CREATE TABLE "locations" (
     "latitude" DOUBLE PRECISION,
     "longitude" DOUBLE PRECISION,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "hours" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -98,6 +158,7 @@ CREATE TABLE "procedure_prices" (
     "price" DOUBLE PRECISION NOT NULL,
     "comments" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "averageMarketPrice" DOUBLE PRECISION,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -111,13 +172,28 @@ CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 CREATE UNIQUE INDEX "providers_userId_key" ON "providers"("userId");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "provider_settings_userId_key" ON "provider_settings"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "admin_settings_userId_key" ON "admin_settings"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "subscription_plans_name_key" ON "subscription_plans"("name");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "procedure_categories_slug_key" ON "procedure_categories"("slug");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "procedure_prices_locationId_templateId_key" ON "procedure_prices"("locationId", "templateId");
 
 -- AddForeignKey
-ALTER TABLE "providers" ADD CONSTRAINT "providers_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "providers" ADD CONSTRAINT "providers_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "provider_settings" ADD CONSTRAINT "provider_settings_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "admin_settings" ADD CONSTRAINT "admin_settings_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "locations" ADD CONSTRAINT "locations_providerId_fkey" FOREIGN KEY ("providerId") REFERENCES "providers"("id") ON DELETE CASCADE ON UPDATE CASCADE;

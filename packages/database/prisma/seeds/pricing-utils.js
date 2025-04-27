@@ -1,52 +1,89 @@
 // packages/database/prisma/seeds/pricing-utils.js
 
 /**
- * Generate realistic procedure prices based on procedure type
- * 
- * @param {string} locationId - The location ID for the price
- * @param {Object} template - The procedure template object
- * @returns {Object} - Price and comments
+ * Generate a realistic procedure price based on the type of procedure
+ * Also includes market average price for comparison
  */
 function generateProcedurePrice(template) {
-  const name = template.name.toLowerCase();
+  // Base price ranges by procedure name keywords (simplified)
+  const priceRanges = {
+    'mri': { min: 600, max: 1200 },
+    'ct': { min: 500, max: 1000 },
+    'x-ray': { min: 100, max: 300 },
+    'ultrasound': { min: 200, max: 500 },
+    'physical': { min: 100, max: 250 },
+    'consultation': { min: 75, max: 180 },
+    'therapy': { min: 90, max: 175 },
+    'screening': { min: 120, max: 350 },
+    'injection': { min: 80, max: 200 },
+    'biopsy': { min: 300, max: 800 },
+    'surgery': { min: 1500, max: 5000 },
+    'default': { min: 150, max: 500 }
+  };
   
-  // MRI procedures should be expensive
-  if (name.includes('mri')) {
-    return {
-      price: Math.floor(Math.random() * 1000) + 1000, // $1000-2000
-      comments: 'Price may vary based on insurance coverage'
-    };
+  // Find matching price range
+  let range = priceRanges.default;
+  const nameLower = template.name.toLowerCase();
+  
+  for (const [keyword, values] of Object.entries(priceRanges)) {
+    if (nameLower.includes(keyword)) {
+      range = values;
+      break;
+    }
   }
   
-  // CT scans slightly less expensive
-  if (name.includes('ct scan') || name.includes('computed tomography')) {
-    return {
-      price: Math.floor(Math.random() * 500) + 500, // $500-1000
-      comments: 'Price includes radiologist reading'
-    };
-  }
+  // Generate random price within range
+  const price = Math.round(Math.random() * (range.max - range.min) + range.min);
   
-  // X-rays more affordable
-  if (name.includes('x-ray')) {
-    return {
-      price: Math.floor(Math.random() * 150) + 100, // $100-250
-      comments: 'Additional views may incur extra charges'
-    };
-  }
+  // Generate market average price (10-40% higher than our price)
+  const marketPriceMultiplier = 1 + (Math.random() * 0.3 + 0.1);
+  const averageMarketPrice = Math.round(price * marketPriceMultiplier);
   
-  // Lab tests
-  if (name.includes('blood') || name.includes('panel') || name.includes('test') || name.includes('count')) {
-    return {
-      price: Math.floor(Math.random() * 80) + 40, // $40-120
-      comments: 'Fasting may be required'
-    };
-  }
+  // Comments explaining any special conditions or preparation required
+  const comments = generateComments(template);
   
-  // Default for other procedures
-  return {
-    price: Math.floor(Math.random() * 300) + 100, // $100-400
-    comments: 'Standard rate'
+  return { 
+    price, 
+    averageMarketPrice,
+    comments 
   };
 }
 
-module.exports = { generateProcedurePrice };
+/**
+ * Generate realistic comments for procedure price
+ */
+function generateComments(template) {
+  const nameLower = template.name.toLowerCase();
+  
+  // Some common procedure comments
+  const commentOptions = [
+    "Standard procedure. No special preparation required.",
+    "Fasting required 8 hours prior to procedure.",
+    "Please bring prior imaging records if available.",
+    "Requires physician referral.",
+    "Insurance pre-authorization recommended.",
+    "Follow-up consultation included in price.",
+    "Multiple sessions may be required for full treatment.",
+    "Price includes facility fee and basic supplies.",
+    "Weekend appointments available at additional cost.",
+    "Sedation available upon request at additional cost."
+  ];
+  
+  // Special comments for certain procedures
+  if (nameLower.includes('mri') || nameLower.includes('ct')) {
+    return "Please notify us of any implants or metal objects. Contrast option available.";
+  } else if (nameLower.includes('ultrasound')) {
+    return "Full bladder may be required. Please drink 32oz of water 1 hour before appointment.";
+  } else if (nameLower.includes('surgery')) {
+    return "Consultation and one follow-up visit included. Pre-op labs not included in price.";
+  } else if (nameLower.includes('biopsy')) {
+    return "Results typically available within 3-5 business days. Follow-up consultation recommended.";
+  }
+  
+  // Random comment for other procedures
+  return commentOptions[Math.floor(Math.random() * commentOptions.length)];
+}
+
+module.exports = {
+  generateProcedurePrice
+};

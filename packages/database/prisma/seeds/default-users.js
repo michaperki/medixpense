@@ -14,6 +14,54 @@ async function createDefaultUsers() {
   const passwordHash = await hashPassword(password);
   console.log('Generated hash for password123:', passwordHash);
   
+  // Enhanced provider data with new fields
+  const enhancedProviderData = {
+    organizationName: 'Sample Medical Practice',
+    phone: '555-123-4567',
+    website: 'https://samplepractice.com',
+    bio: 'A leading medical practice dedicated to providing quality care for over 20 years. Our team of board-certified physicians and medical professionals is committed to delivering comprehensive healthcare services with compassion and expertise.',
+    logoUrl: 'https://placehold.co/400x400?text=SMP',
+    address: '123 Main Street',
+    city: 'Anytown',
+    state: 'CA',
+    zipCode: '90210',
+    subscriptionStatus: 'ACTIVE',
+    subscriptionTier: 'BASIC',
+    
+    // New fields for public provider pages
+    specialties: [
+      "Primary Care", 
+      "Family Medicine", 
+      "Pediatrics", 
+      "Internal Medicine", 
+      "Preventive Medicine"
+    ],
+    services: [
+      "Annual Physical Exams",
+      "Preventive Care",
+      "Chronic Disease Management",
+      "Vaccinations",
+      "Minor Surgical Procedures",
+      "Telehealth Appointments",
+      "Lab Services"
+    ],
+    mission: "Our mission is to provide accessible, patient-centered healthcare that improves the quality of life for our community members at every stage of life.",
+    email: "info@samplepractice.com",
+    yearEstablished: 2003,
+    licensingInfo: "All physicians are board-certified by the American Board of Medical Specialties and licensed by the California Medical Board.",
+    insuranceAccepted: [
+      "Aetna",
+      "Blue Cross Blue Shield",
+      "Cigna",
+      "Humana",
+      "Medicare",
+      "Medicaid",
+      "UnitedHealthcare"
+    ],
+    reviewCount: 157,
+    rating: 4.8
+  };
+
   // Default users with providers and settings
   const defaultUsers = [
     {
@@ -37,19 +85,8 @@ async function createDefaultUsers() {
       status: 'ACTIVE',
       phone: '555-222-0000',
       
-      // Provider data
-      providerData: {
-        organizationName: 'Sample Medical Practice',
-        phone: '555-123-4567',
-        website: 'https://samplepractice.com',
-        bio: 'A leading medical practice dedicated to providing quality care.',
-        address: '123 Main Street',
-        city: 'Anytown',
-        state: 'CA',
-        zipCode: '90210',
-        subscriptionStatus: 'ACTIVE',  // Explicitly set to ACTIVE
-        subscriptionTier: 'BASIC'      // Match the subscription plan
-      },
+      // Provider data with enhanced fields
+      providerData: enhancedProviderData,
       
       // Provider settings data
       settingsData: {
@@ -68,7 +105,7 @@ async function createDefaultUsers() {
           sessionTimeout: 30
         }),
         billing: JSON.stringify({
-          subscriptionPlan: 'BASIC',  // Updated from FREE to match active subscription
+          subscriptionPlan: 'BASIC',
           autoRenew: true
         })
       }

@@ -37,28 +37,37 @@ model User {
 }
 
 model Provider {
-  id                String     @id @default(uuid())
-  userId            String     @unique
-  organizationName  String
-  phone             String?
-  website           String?
-  bio               String?
-  logoUrl           String?
-  address           String?
-  city              String?
-  state             String?
-  zipCode           String?
-  stripeCustomerId  String?
-  subscriptionStatus SubscriptionStatus @default(ACTIVE)  // Changed default to ACTIVE
-  subscriptionTier  String?
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  organizationName String
+  phone            String?
+  website          String?
+  bio              String?
+  logoUrl          String?
+  address          String?
+  city             String?
+  state            String?
+  zipCode          String?
+  subscriptionStatus String?
+  subscriptionTier String?
+  // Add these fields as JSON
+  specialties      Json?     // For storing array of specialties
+  services         Json?     // For storing array of services
+  insuranceAccepted Json?    // For storing array of accepted insurance
+  mission          String?
+  email            String?
+  yearEstablished  Int?
+  licensingInfo    String?
+  reviewCount      Int?
+  rating           Float?
+  stripeCustomerId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
   
   // Relations
-  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  locations         Location[]
+  user             User      @relation(fields: [userId], references: [id])
+  locations        Location[]
   
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-
   @@map("providers")
 }
 
@@ -124,6 +133,9 @@ model Location {
   longitude     Float?
   isActive      Boolean    @default(true)
   
+  // New field for operating hours
+  hours         Json?      // Store opening hours as JSON
+  
   // Relations
   provider      Provider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
   procedures    ProcedurePrice[]
@@ -172,19 +184,22 @@ model ProcedureTemplate {
 }
 
 model ProcedurePrice {
-  id            String           @id @default(uuid())
-  locationId    String
-  templateId    String
-  price         Float
-  comments      String?
-  isActive      Boolean          @default(true)
+  id                String           @id @default(uuid())
+  locationId        String
+  templateId        String
+  price             Float
+  comments          String?
+  isActive          Boolean          @default(true)
+  
+  // New field for market comparison
+  averageMarketPrice Float?
   
   // Relations
-  location      Location         @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  template      ProcedureTemplate @relation(fields: [templateId], references: [id])
+  location          Location         @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  template          ProcedureTemplate @relation(fields: [templateId], references: [id])
   
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   @@unique([locationId, templateId])
   @@map("procedure_prices")
