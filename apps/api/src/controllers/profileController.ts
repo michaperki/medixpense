@@ -1,13 +1,13 @@
-// apps/api/src/controllers/profileController.js
-import { uploadToS3, getPublicUrl } from '../services/aws.js';
 
-import { prisma } from '@packages/database'
+import { Request, Response } from 'express';
+import { uploadToS3, getPublicUrl } from '../services/aws';
+import { prisma } from '@packages/database';
 
 /**
  * GET /api/profile/provider
  * Get the current provider's profile
  */
-export async function getProviderProfile(req, res) {
+export async function getProviderProfile(req: Request, res: Response): Promise<Response> {
   try {
     const userId = req.user.id;
     
@@ -20,10 +20,10 @@ export async function getProviderProfile(req, res) {
       return res.status(404).json({ message: 'Provider profile not found' });
     }
     
-    res.json(provider);
+    return res.json(provider);
   } catch (err) {
     console.error('Error fetching provider profile:', err);
-    res.status(500).json({ message: 'Internal server error' });
+    return res.status(500).json({ message: 'Internal server error' });
   }
 }
 
@@ -31,7 +31,7 @@ export async function getProviderProfile(req, res) {
  * PUT /api/profile/provider
  * Update the current provider's profile
  */
-export async function updateProviderProfile(req, res) {
+export async function updateProviderProfile(req: Request, res: Response): Promise<Response> {
   try {
     const userId = req.user.id;
     const {
@@ -77,10 +77,10 @@ export async function updateProviderProfile(req, res) {
       });
     }
     
-    res.json(updatedProvider);
+    return res.json(updatedProvider);
   } catch (err) {
     console.error('Error updating provider profile:', err);
-    res.status(500).json({ message: 'Internal server error' });
+    return res.status(500).json({ message: 'Internal server error' });
   }
 }
 
@@ -88,7 +88,7 @@ export async function updateProviderProfile(req, res) {
  * POST /api/profile/provider/logo
  * Upload provider logo
  */
-export async function uploadProviderLogo(req, res) {
+export async function uploadProviderLogo(req: Request, res: Response): Promise<Response> {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
@@ -105,7 +105,7 @@ export async function uploadProviderLogo(req, res) {
       return res.status(404).json({ message: 'Provider profile not found' });
     }
     
-    // Upload to S3 (you'll need to implement this)
+    // Upload to S3
     const filename = `provider-logos/${userId}-${Date.now()}-${req.file.originalname}`;
     const result = await uploadToS3(req.file.buffer, filename, req.file.mimetype);
     const logoUrl = getPublicUrl(filename);
@@ -116,10 +116,10 @@ export async function uploadProviderLogo(req, res) {
       data: { logoUrl }
     });
     
-    res.json({ logoUrl });
+    return res.json({ logoUrl });
   } catch (err) {
     console.error('Error uploading provider logo:', err);
-    res.status(500).json({ message: 'Internal server error' });
+    return res.status(500).json({ message: 'Internal server error' });
   }
 }
 
@@ -127,7 +127,7 @@ export async function uploadProviderLogo(req, res) {
  * GET /api/profile/provider/:providerId/public
  * Get public provider profile
  */
-export async function getPublicProviderProfile(req, res) {
+export async function getPublicProviderProfile(req: Request, res: Response): Promise<Response> {
   try {
     const { providerId } = req.params;
     
@@ -153,9 +153,10 @@ export async function getPublicProviderProfile(req, res) {
       return res.status(404).json({ message: 'Provider profile not found' });
     }
     
-    res.json(provider);
+    return res.json(provider);
   } catch (err) {
     console.error('Error fetching public provider profile:', err);
-    res.status(500).json({ message: 'Internal server error' });
+    return res.status(500).json({ message: 'Internal server error' });
   }
 }
+

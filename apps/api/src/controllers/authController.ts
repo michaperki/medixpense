@@ -1,14 +1,16 @@
 
-// apps/api/src/controllers/authController.js
+// apps/api/src/controllers/authController.ts
 
+import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import { generateToken } from '../middleware/auth.js';
 
-import { prisma } from '@packages/database'
+import { prisma } from '@packages/database';
+
 /**
  * POST /api/auth/register
  */
-export async function signupController(req, res) {
+export async function signupController(req: Request, res: Response): Promise<Response> {
   const { email, password, firstName, lastName } = req.body;
 
   try {
@@ -39,7 +41,7 @@ export async function signupController(req, res) {
     const token = generateToken(user);
 
     // 5. Return user info + token
-    res.json({
+    return res.json({
       user: {
         id: user.id,
         email: user.email,
@@ -51,14 +53,14 @@ export async function signupController(req, res) {
     });
   } catch (err) {
     console.error('Signup error:', err);
-    res.status(500).json({ message: 'Internal server error' });
+    return res.status(500).json({ message: 'Internal server error' });
   }
 }
 
 /**
  * POST /api/auth/login
  */
-export async function loginController(req, res) {
+export async function loginController(req: Request, res: Response): Promise<Response> {
   const { email, password } = req.body;
 
   try {

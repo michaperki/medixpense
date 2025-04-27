@@ -1,27 +1,33 @@
-import { prisma } from '@packages/database'
+import { Request, Response } from 'express';
+import { prisma } from '@packages/database';
 
-// Existing methods
-export const getProviderByUserId = async (req, res) => {
+// Get provider by userId
+export const getProviderByUserId = async (req: Request, res: Response) => {
   const { userId } = req.params;
-  const provider = await prisma.provider.findUnique({ where: { userId } });
-  if (!provider) return res.status(404).json({ message: 'Provider not found' });
-  res.json(provider);
+
+  try {
+    const provider = await prisma.provider.findUnique({
+      where: { userId },
+      include: { locations: true },
+    });
+
+    if (!provider) return res.status(404).json({ message: 'Provider not found' });
+    res.json(provider);
+  } catch (err) {
+    console.error('Error fetching provider by userId:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
 };
 
-// in apps/api/src/controllers/providersController.js
-
-export const getProviderProcedures = async (req, res) => {
+// Get provider procedures
+export const getProviderProcedures = async (req: Request, res: Response) => {
   const { providerId } = req.params;
+
   try {
-    const raw = await prisma.procedurePrice.findMany({
-      where: {
-        location: { providerId }
-      },
+    const procedures = await prisma.procedurePrice.findMany({
+      where: { location: { providerId } },
       include: {
-        template: {
-          include: { category: true }
-        },
-        // pull in the full Location object
+        template: { include: { category: true } },
         location: {
           select: {
             id: true,
@@ -29,94 +35,63 @@ export const getProviderProcedures = async (req, res) => {
             address1: true,
             city: true,
             state: true,
-            zipCode: true
-          }
-        }
+            zipCode: true,
+          },
+        },
       },
       orderBy: [
         { location: { name: 'asc' } },
-        { template: { name: 'asc' } }
-      ]
+        { template: { name: 'asc' } },
+      ],
     });
 
-    // wrap in an object so the front-end sees `rawResponse.procedures`
-    return res.json({ procedures: raw });
+    res.json({ procedures });
   } catch (err) {
     console.error('Error fetching provider procedures:', err);
-    return res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
-
-
-/**
- * GET /api/providers/specialties
- */
-export const getSpecialties = async (_req, res) => {
+// Get specialties
+export const getSpecialties = async (_req: Request, res: Response) => {
   try {
-    // Fetch just the array column
-    const rows = await prisma.provider.findMany({
-      select: { specialties: true }
-    });
+    const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT specialties FROM "providers"`);
 
-    // Flatten, dedupe, sort
-    const specialties = [
-      ...new Set(
-        rows.flatMap(p => p.specialties || [])
-      )
-    ].sort();
+    const specialties = [...new Set(
+      rows.flatMap(row => Array.isArray(row.specialties) ? row.specialties : [])
+    )].sort();
 
     res.json({ specialties });
   } catch (err) {
-    console.error('getSpecialties error:', err);
+    console.error('Error fetching specialties:', err);
     res.status(500).json({ message: 'Failed to fetch specialties' });
   }
 };
 
-/**
- * GET /api/providers/:id
- * Get detailed information about a provider for public display
- */
-export const getProviderById = async (req, res) => {
-  try {
-    const { id } = req.params;
+// Get provider by Id
+export const getProviderById = async (req: Request, res: Response) => {
+  const { id } = req.params;
 
+  try {
     const provider = await prisma.provider.findUnique({
       where: { id },
-      include: {
-        locations: true,
-        // Get procedures through locations
-        // This assumes your schema has Provider -> Locations -> ProcedurePrices
-        // Adjust as needed based on your actual schema
-      }
+      include: { locations: true },
     });
 
-    if (!provider) {
-      return res.status(404).json({ message: 'Provider not found' });
-    }
+    if (!provider) return res.status(404).json({ message: 'Provider not found' });
 
-    // Get all procedures offered by this provider's locations
-    const locationIds = provider.locations.map(loc => loc.id);
     const procedures = await prisma.procedurePrice.findMany({
-      where: {
-        locationId: { in: locationIds },
-        isActive: true
-      },
+      where: { locationId: { in: provider.locations.map(loc => loc.id) }, isActive: true },
       include: {
-        template: {
-          include: {
-            category: true
-          }
-        }
-      }
+        template: { include: { category: true } },
+      },
     });
 
-    // Format procedures to match expected structure
     const formattedProcedures = procedures.map(proc => {
-      // Calculate savings percentage if possible
-      let savingsPercent = null;
-      if (proc.averageMarketPrice && proc.price) {
-        savingsPercent = Math.round(((proc.averageMarketPrice - proc.price) / proc.averageMarketPrice) * 100);
+      let savingsPercent: number | null = null;
+      const avgMarketPrice = (proc as any).averageMarketPrice;
+      if (avgMarketPrice && proc.price) {
+        savingsPercent = Math.round(((avgMarketPrice - proc.price) / avgMarketPrice) * 100);
       }
 
       return {
@@ -125,151 +100,89 @@ export const getProviderById = async (req, res) => {
         description: proc.template.description,
         price: proc.price,
         savingsPercent,
-        category: proc.template.category
+        category: proc.template.category,
       };
     });
 
-    // Construct response with specified structure
     const response = {
       id: provider.id,
-      name: provider.organizationName || provider.name,
-      description: provider.description || provider.bio,
-      mission: provider.mission,
+      name: provider.organizationName,
+      description: provider.bio || '',
+      mission: (provider as any).mission || '',
       logoUrl: provider.logoUrl,
       website: provider.website,
       phone: provider.phone,
-      email: provider.email,
-      yearEstablished: provider.yearEstablished,
-      licensingInfo: provider.licensingInfo,
-      insuranceAccepted: provider.insuranceAccepted,
-      specialties: provider.specialties,
-      services: provider.services,
-      reviewCount: provider.reviewCount,
-      rating: provider.rating,
+      email: (provider as any).email || '',
+      yearEstablished: (provider as any).yearEstablished || null,
+      licensingInfo: (provider as any).licensingInfo || '',
+      insuranceAccepted: (provider as any).insuranceAccepted || [],
+      specialties: (provider as any).specialties || [],
+      services: (provider as any).services || [],
+      reviewCount: (provider as any).reviewCount || 0,
+      rating: (provider as any).rating || 0,
       locations: provider.locations,
-      procedures: formattedProcedures
+      procedures: formattedProcedures,
     };
 
     res.json({ provider: response });
   } catch (err) {
-    console.error('Error fetching provider:', err);
+    console.error('Error fetching provider by id:', err);
     res.status(500).json({ message: 'Failed to fetch provider details' });
   }
 };
 
-/**
- * GET /api/search/providers
- * Search for providers based on various criteria
- */
-export const searchProviders = async (req, res) => {
+// Search providers
+export const searchProviders = async (req: Request, res: Response) => {
+  const {
+    query,
+    location,
+    distance = '50',
+    specialty,
+    sort = 'distance_asc',
+    page = '1',
+    limit = '20',
+  } = req.query;
+
   try {
-    const {
-      query,
-      location,
-      distance = '50',
-      specialty,
-      sort = 'distance_asc',
-      page = '1',
-      limit = '20'
-    } = req.query;
-
-    const pageNum = parseInt(page, 10);
-    const limitNum = parseInt(limit, 10);
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
     const skip = (pageNum - 1) * limitNum;
-    const distanceNum = parseInt(distance, 10);
 
-    // Build the where clause
-    const where = {};
+    const where: any = {};
 
-    // Text search
-    if (query) {
+    if (typeof query === 'string' && query.trim()) {
       where.OR = [
-        { name: { contains: query, mode: 'insensitive' } },
-        { organizationName: { contains: query, mode: 'insensitive' } },
-        { description: { contains: query, mode: 'insensitive' } },
-        { specialties: { has: query } }
+        { organizationName: { contains: query.trim(), mode: 'insensitive' } },
+        { bio: { contains: query.trim(), mode: 'insensitive' } },
       ];
     }
 
-    // Filter by specialty
-    if (specialty) {
-      where.specialties = { has: specialty };
+    if (typeof specialty === 'string' && specialty.trim()) {
+      where.specialties = { has: specialty.trim() };
     }
 
-    // Location-based search
-    let searchLocation = null;
-    if (location) {
-      // This would require a geocoding service to convert location string to coordinates
-      // For now, we'll assume you have a way to do this
-      
-      // For demo, use hardcoded values
-      searchLocation = {
-        latitude: 37.7749, // San Francisco as default
-        longitude: -122.4194
-      };
-
-      // If location found, filter by distance
-      // This would require a database that supports geospatial queries
-    }
-
-    // Execute the count query for pagination
     const total = await prisma.provider.count({ where });
 
-    // Determine the sort order
-    let orderBy = {};
-    switch (sort) {
-      case 'name_asc':
-        orderBy = { name: 'asc' };
-        break;
-      case 'rating_desc':
-        orderBy = { rating: 'desc' };
-        break;
-      case 'procedure_count_desc':
-        // Fallback to name
-        orderBy = { name: 'asc' };
-        break;
-      case 'distance_asc':
-      default:
-        // Fallback to name
-        orderBy = { name: 'asc' };
-        break;
-    }
-
-    // Fetch the providers
     const providers = await prisma.provider.findMany({
       where,
-      include: {
-        locations: {
-          take: 1, // Just get the primary location for list view
-        }
-      },
-      orderBy,
+      include: { locations: { take: 1 } },
+      orderBy: { organizationName: 'asc' },
       skip,
-      take: limitNum
+      take: limitNum,
     });
 
-    // Format the response
     const formattedProviders = providers.map(provider => {
-      // Get the primary location
       const primaryLocation = provider.locations[0] || {};
-
-      // Calculate distance if we have search coordinates and location has coordinates
-      let distance = null;
-      if (searchLocation && primaryLocation.latitude && primaryLocation.longitude) {
-        // In a real implementation, calculate distance using Haversine formula
-        // For demo, use a random value between 0 and the max distance
-        distance = Math.random() * distanceNum;
-      }
 
       return {
         id: provider.id,
-        name: provider.organizationName || provider.name,
-        description: provider.description || provider.bio,
+        name: provider.organizationName,
+        description: provider.bio || '',
         logoUrl: provider.logoUrl,
         website: provider.website,
         phone: provider.phone,
-        reviewCount: provider.reviewCount,
-        rating: provider.rating,
+        reviewCount: (provider as any).reviewCount || 0,
+        rating: (provider as any).rating || 0,
         location: {
           id: primaryLocation.id || '',
           city: primaryLocation.city || '',
@@ -277,27 +190,20 @@ export const searchProviders = async (req, res) => {
           zipCode: primaryLocation.zipCode || '',
           address1: primaryLocation.address1 || '',
           latitude: primaryLocation.latitude,
-          longitude: primaryLocation.longitude
+          longitude: primaryLocation.longitude,
         },
-        procedureCount: provider.procedureCount || Math.floor(Math.random() * 50) + 1, // Demo value
-        specialties: provider.specialties || [],
-        distance
+        specialties: (provider as any).specialties || [],
       };
     });
 
-    // Construct pagination info
     const pagination = {
       page: pageNum,
       limit: limitNum,
       total,
-      pages: Math.ceil(total / limitNum)
+      pages: Math.ceil(total / limitNum),
     };
 
-    res.json({
-      providers: formattedProviders,
-      pagination,
-      data: searchLocation ? { searchLocation } : undefined
-    });
+    res.json({ providers: formattedProviders, pagination });
   } catch (err) {
     console.error('Error searching providers:', err);
     res.status(500).json({ message: 'Failed to search providers' });

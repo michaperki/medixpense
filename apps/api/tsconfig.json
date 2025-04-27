@@ -12,8 +12,8 @@
     "allowJs": true,
     "baseUrl": ".",
     "paths": {
-      "@packages/database": ["../../packages/database/lib/prisma.ts"],
-      "@packages/database/*": ["../../packages/database/lib/*"]
+      "@packages/database": ["packages/database/lib/prisma.ts"],
+      "@packages/database/*": ["packages/database/lib/*"]
     }
   },
   "include": ["src"],

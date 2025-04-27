@@ -1,3 +1,4 @@
+
 // apps/api/src/index.ts
 import 'dotenv/config';
 import 'tsconfig-paths/register';
@@ -5,7 +6,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import helmet from 'helmet';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@packages/database';
 import authRoutes from './routes/auth';
 import locationRoutes from './routes/locations';
 import providerRoutes from './routes/providers';
@@ -15,7 +16,6 @@ import profileRoutes from './routes/profile';
 import settingsRoutes from './routes/settings';
 
 const app = express();
-const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
@@ -50,12 +50,40 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-}).on('error', (err: any) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} is already in use.`);
+// Connect DB and start server
+async function startServer() {
+  try {
+    console.log('Connecting to database...');
+    await prisma.$connect();
+    console.log('✅ Successfully connected to database');
+
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    }).on('error', (err: any) => {
+      console.error('Server error:', err);
+      if (err.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use.`);
+        process.exit(1);
+      }
+    });
+  } catch (error) {
+    console.error('❌ Failed to connect to database:', error);
     process.exit(1);
   }
+}
+
+startServer();
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('Shutting down server...');
+  await prisma.$disconnect();
+  process.exit(0);
 });
+
+process.on('SIGTERM', async () => {
+  console.log('Shutting down server...');
+  await prisma.$disconnect();
+  process.exit(0);
+});
+

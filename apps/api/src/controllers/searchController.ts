@@ -1,167 +1,135 @@
 
-// apps/api/src/controllers/searchController.js
-// -----------------------------------------------------------------------------
-// Procedure / provider search + stats endpoints
-// Fixed typos, consistent camel‑casing, and guard‑clauses that were crashing the
-// handlers (geocodeAddress, calculateDistance, parseInt, Math, Infinity, etc.).
-// -----------------------------------------------------------------------------
-
+import { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { geocodeAddress } from '../services/geocoding.js';
 import { calculateDistance } from '../utils/distance.js';
+import { prisma } from '@packages/database';
 
-import { prisma } from '@packages/database'
+// Helpers
+const toInt = (value: string | string[] | undefined, defaultValue = 0) =>
+  parseInt(Array.isArray(value) ? value[0] : value ?? '', 10) || defaultValue;
 
-// -----------------------------------------------------------------------------
-// GET /procedures
-// -----------------------------------------------------------------------------
-export async function getProcedures(req, res) {
+type ProcedureWithDistance = Prisma.ProcedurePriceGetPayload<{
+  include: {
+    template: { include: { category: true } };
+    location: { include: { provider: true } };
+  };
+}> & { distance?: number };
+
+export async function getProcedures(req: Request, res: Response) {
   try {
-    const {
-      query,
-      categoryId,
-      location,
-      distance = 50,
-      sort = 'price_asc',
-      page = 1,
-      limit = 20
-    } = req.query;
+    const { query, categoryId, location, distance, sort, page, limit } = req.query;
 
-    console.log('[QUERY]', req.query);
-
-    const perPage = parseInt(limit, 10);
-    const skip = (parseInt(page, 10) - 1) * perPage;
-    const searchRadius = parseInt(distance, 10);
-    const normalizedQuery = (query || '').trim().toLowerCase();
+    const perPage = toInt(limit as string, 20);
+    const skip = (toInt(page as string, 1) - 1) * perPage;
+    const searchRadius = toInt(distance as string, 50);
+    const normalizedQuery = typeof query === 'string' ? query.trim().toLowerCase() : '';
 
     const where = {
       isActive: true,
       location: { isActive: true },
       template: {
         isActive: true,
-        ...(categoryId && { categoryId }),
-        ...(normalizedQuery && {
-          OR: [
-            { name: { contains: normalizedQuery, mode: 'insensitive' } },
-            { description: { contains: normalizedQuery, mode: 'insensitive' } },
-            { searchTerms: { contains: normalizedQuery, mode: 'insensitive' } }
-          ]
-        })
+        ...(categoryId ? { categoryId: categoryId as string } : {}),
+        ...(normalizedQuery
+          ? {
+              OR: [
+                { name: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } },
+                { description: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } },
+                { searchTerms: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } }
+              ]
+            }
+          : {})
       }
     };
-
-    console.log('[QUERY] where-clause built', where);
 
     const [procedures, total] = await Promise.all([
       prisma.procedurePrice.findMany({
         where,
         include: {
           template: { include: { category: true } },
-          location: {
-            include: {
-              provider: {
-                select: { id: true, organizationName: true, logoUrl: true }
-              }
-            }
-          }
+          location: { include: { provider: true } }
         },
-        orderBy: { price: sort.includes('desc') ? 'desc' : 'asc' },
+        orderBy: { price: (sort as string)?.includes('desc') ? 'desc' : 'asc' },
         skip,
         take: perPage
       }),
       prisma.procedurePrice.count({ where })
     ]);
 
-    console.log('[DATA] Procedures fetched', { count: procedures.length, total });
+    let userCoords: { latitude: number; longitude: number } | null = null;
+    let geocodeError: string | null = null;
+    let items: ProcedureWithDistance[] = procedures;
 
-    let userCoords = null;
-    let geocodeError = null;
-    let items = procedures;
-
-    if (location) {
+    if (location && typeof location === 'string') {
       userCoords = await geocodeAddress(location);
-      console.log('[GEO] Geocoded location', { input: location, coords: userCoords });
-
       if (userCoords) {
-        items = procedures
-          .map(p => {
-            if (!p.location.latitude || !p.location.longitude) return null;
-            const d = calculateDistance(
-              userCoords.latitude,
-              userCoords.longitude,
-              p.location.latitude,
-              p.location.longitude
-            );
-            return { ...p, distance: d };
-          })
-          .filter(p => p && p.distance <= searchRadius);
+        items = procedures.flatMap(p => {
+          if (!p.location?.latitude || !p.location?.longitude) return [];
+          const d = calculateDistance(
+            userCoords!.latitude,
+            userCoords!.longitude,
+            p.location.latitude,
+            p.location.longitude
+          );
+          if (d > searchRadius) return [];
+          return [{ ...p, distance: d }];
+        });
       } else {
         geocodeError = 'Could not geocode the provided location';
-        console.warn('[GEO] Failed to geocode', { location });
-        items = procedures.map(p => ({ ...p, distance: null }));
       }
     }
 
     const sorted = [...items];
-    switch (sort) {
-      case 'price_desc':
-        sorted.sort((a, b) => b.price - a.price);
-        break;
-      case 'distance_asc':
-        if (userCoords) {
-          sorted.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
-        }
-        break;
-      case 'name_asc':
-        sorted.sort((a, b) => a.template.name.localeCompare(b.template.name));
-        break;
-      default:
-        sorted.sort((a, b) => a.price - b.price);
+    if (sort === 'price_desc') {
+      sorted.sort((a, b) => b.price - a.price);
+    } else if (sort === 'distance_asc' && userCoords) {
+      sorted.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
+    } else if (sort === 'name_asc') {
+      sorted.sort((a, b) => (a.template.name ?? '').localeCompare(b.template.name ?? ''));
+    } else {
+      sorted.sort((a, b) => a.price - b.price);
     }
-
-    // ─── after your `const sorted = …` ─────────────────────────────────────────
 
     const results = sorted.map(item => ({
       id: item.id,
       price: item.price,
       comments: item.comments,
-      distance: item.distance,
-
+      distance: item.distance ?? null,
       procedure: {
-        id:          item.template.id,
-        name:        item.template.name,
+        id: item.template.id,
+        name: item.template.name,
         description: item.template.description,
-        category: {
-          id:   item.template.category.id,
-          name: item.template.category.name
-        }
+        category: item.template.category
+          ? {
+              id: item.template.category.id,
+              name: item.template.category.name
+            }
+          : null
       },
-
       provider: {
-        id:      item.location.provider.id,
-        name:    item.location.provider.organizationName,
+        id: item.location.provider.id,
+        name: item.location.provider.organizationName,
         logoUrl: item.location.provider.logoUrl
       },
-
       location: {
-        id:      item.location.id,
-        name:    item.location.name,
+        id: item.location.id,
+        name: item.location.name,
         address: item.location.address1
           ? `${item.location.address1}, ${item.location.city}, ${item.location.state} ${item.location.zipCode}`
-          : 'Address not available',
-        city:    item.location.city,
-        state:   item.location.state,
+          : '',
+        city: item.location.city,
+        state: item.location.state,
         zipCode: item.location.zipCode,
-        latitude:  item.location.latitude,
+        latitude: item.location.latitude,
         longitude: item.location.longitude
       }
     }));
 
-    // ─── then build your `response = { results, pagination: { … } }` as before ────
-
-    const response = {
+    const response: any = {
       results,
       pagination: {
-        page: parseInt(page, 10),
+        page: toInt(page as string, 1),
         limit: perPage,
         total,
         pages: Math.ceil(total / perPage)
@@ -178,15 +146,9 @@ export async function getProcedures(req, res) {
       };
     }
 
-    if (query && results.length) {
-      response.procedureName = results[0].procedure.name;
-    }
+    if (geocodeError) response.error = geocodeError;
+    if (query && results.length) response.procedureName = results[0].procedure.name;
 
-    if (geocodeError) {
-      response.error = geocodeError;
-    }
-
-    console.log('[RES]', { results: results.length, page, total, geocodeError });
     res.json(response);
   } catch (err) {
     console.error('[ERROR] Search error:', err);
@@ -194,13 +156,10 @@ export async function getProcedures(req, res) {
   }
 }
 
-// -----------------------------------------------------------------------------
-// GET /stats/:templateId
-// -----------------------------------------------------------------------------
-export async function getStats(req, res) {
+export async function getStats(req: Request, res: Response) {
   try {
     const { templateId } = req.params;
-    const { location, distance = 50 } = req.query;
+    const { location, distance } = req.query;
 
     const template = await prisma.procedureTemplate.findUnique({
       where: { id: templateId },
@@ -208,26 +167,29 @@ export async function getStats(req, res) {
     });
     if (!template) return res.status(404).json({ message: 'Procedure template not found' });
 
-    const searchRadius = parseInt(distance, 10);
-    let where = { templateId, isActive: true, location: { isActive: true } };
+    const searchRadius = toInt(distance as string, 50);
 
     const prices = await prisma.procedurePrice.findMany({
-      where,
+      where: {
+        templateId,
+        isActive: true,
+        location: { isActive: true }
+      },
       include: { location: true }
     });
 
     let filtered = prices;
-    let userCoords = null;
-    let geocodeError = null;
+    let userCoords: { latitude: number; longitude: number } | null = null;
+    let geocodeError: string | null = null;
 
-    if (location) {
+    if (location && typeof location === 'string') {
       userCoords = await geocodeAddress(location);
       if (userCoords) {
         filtered = prices.filter(p => {
-          if (!p.location.latitude || !p.location.longitude) return false;
+          if (!p.location?.latitude || !p.location?.longitude) return false;
           const d = calculateDistance(
-            userCoords.latitude,
-            userCoords.longitude,
+            userCoords!.latitude,
+            userCoords!.longitude,
             p.location.latitude,
             p.location.longitude
           );
@@ -235,28 +197,29 @@ export async function getStats(req, res) {
         });
       } else {
         geocodeError = 'Could not geocode the provided location';
-        console.warn(`Geocoding failed for location in stats: ${location}`);
       }
     }
 
-    const vals = filtered.map(p => p.price);
-    const sortedVals = [...vals].sort((a, b) => a - b);
+    const pricesList = filtered.map(p => p.price);
+    const sortedPrices = [...pricesList].sort((a, b) => a - b);
 
-    const median = vals.length
-      ? vals.length % 2 === 0
-        ? (sortedVals[vals.length / 2 - 1] + sortedVals[vals.length / 2]) / 2
-        : sortedVals[Math.floor(vals.length / 2)]
+    const median = pricesList.length
+      ? pricesList.length % 2 === 0
+        ? (sortedPrices[pricesList.length / 2 - 1] + sortedPrices[pricesList.length / 2]) / 2
+        : sortedPrices[Math.floor(pricesList.length / 2)]
       : 0;
 
     const stats = {
-      count: vals.length,
-      min: vals.length ? Math.min(...vals) : 0,
-      max: vals.length ? Math.max(...vals) : 0,
-      average: vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0,
+      count: pricesList.length,
+      min: pricesList.length ? Math.min(...pricesList) : 0,
+      max: pricesList.length ? Math.max(...pricesList) : 0,
+      average: pricesList.length
+        ? Math.round(pricesList.reduce((sum, price) => sum + price, 0) / pricesList.length)
+        : 0,
       median
     };
 
-    const response = { template, stats };
+    const response: any = { template, stats };
 
     if (userCoords) {
       response.locationInfo = {
@@ -266,37 +229,35 @@ export async function getStats(req, res) {
       };
     }
 
-    if (geocodeError) {
-      response.error = geocodeError;
-    }
+    if (geocodeError) response.error = geocodeError;
 
     res.json(response);
   } catch (err) {
-    console.error('Stats error:', err);
+    console.error('[ERROR] Stats error:', err);
     res.status(500).json({ message: 'Error retrieving procedure statistics' });
   }
 }
 
-// -----------------------------------------------------------------------------
-// GET /providers
-// -----------------------------------------------------------------------------
-export async function getProviders(req, res) {
+export async function getProviders(req: Request, res: Response) {
   try {
-    const { query, location, distance = 50, page = 1, limit = 20 } = req.query;
-    const perPage = parseInt(limit, 10);
-    const skip = (parseInt(page, 10) - 1) * perPage;
-    const searchRadius = parseInt(distance, 10);
+    const { query, location, distance, page, limit } = req.query;
 
-    // Provider filter ---------------------------------------------------------
+    const perPage = toInt(limit as string, 20);
+    const skip = (toInt(page as string, 1) - 1) * perPage;
+    const searchRadius = toInt(distance as string, 50);
+    const normalizedQuery = typeof query === 'string' ? query.trim().toLowerCase() : '';
+
     const where = {
-      subscriptionStatus: 'ACTIVE',
+      subscriptionStatus: { equals: 'ACTIVE' as const }, // ✅ fix enum typing
       locations: { some: { isActive: true } },
-      ...(query && {
-        OR: [
-          { organizationName: { contains: query, mode: 'insensitive' } },
-          { bio: { contains: query, mode: 'insensitive' } }
-        ]
-      })
+      ...(normalizedQuery
+        ? {
+            OR: [
+              { organizationName: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } },
+              { bio: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } }
+            ]
+          }
+        : {})
     };
 
     const [providers, total] = await Promise.all([
@@ -309,14 +270,12 @@ export async function getProviders(req, res) {
       prisma.provider.count({ where })
     ]);
 
-    // Location filtering / distance calc -------------------------------------
     let results = providers;
-    let userCoords = null;
-    let geocodeError = null;
+    let userCoords: { latitude: number; longitude: number } | null = null;
+    let geocodeError: string | null = null;
 
-    if (location) {
+    if (location && typeof location === 'string') {
       userCoords = await geocodeAddress(location);
-
       if (userCoords) {
         results = providers
           .map(p => {
@@ -324,26 +283,22 @@ export async function getProviders(req, res) {
               if (!loc.latitude || !loc.longitude) return { ...loc, distance: null };
               return {
                 ...loc,
-                distance: calculateDistance(
-                  userCoords.latitude,
-                  userCoords.longitude,
-                  loc.latitude,
-                  loc.longitude
-                )
+                distance: calculateDistance(userCoords!.latitude, userCoords!.longitude, loc.latitude, loc.longitude)
               };
             });
-            const closest = locs.filter(l => l.distance !== null).sort((a, b) => a.distance - b.distance)[0];
+            const closest = locs
+              .filter(l => l.distance !== null)
+              .sort((a, b) => (a.distance! - b.distance!))[0];
             return {
               ...p,
               locations: locs,
               closestLocationDistance: closest?.distance ?? null
             };
           })
-          .filter(p => p.closestLocationDistance !== null && p.closestLocationDistance <= searchRadius)
-          .sort((a, b) => a.closestLocationDistance - b.closestLocationDistance);
+          .filter(p => p.closestLocationDistance !== null && p.closestLocationDistance! <= searchRadius)
+          .sort((a, b) => (a.closestLocationDistance! - b.closestLocationDistance!));
       } else {
         geocodeError = 'Could not geocode the provided location';
-        console.warn(`Geocoding failed for location in providers: ${location}`);
         results = providers.map(p => ({
           ...p,
           locations: p.locations.map(loc => ({ ...loc, distance: null })),
@@ -361,16 +316,16 @@ export async function getProviders(req, res) {
       locations: p.locations.map(l => ({
         id: l.id,
         name: l.name,
-        address: `${l.address1}, ${l.city}, ${l.state} ${l.zipCode}`,
-        distance: l.distance
+        address: l.address1 ? `${l.address1}, ${l.city}, ${l.state} ${l.zipCode}` : '',
+        distance: (l as any).distance ?? null
       })),
-      distance: p.closestLocationDistance
+      distance: (p as any).closestLocationDistance ?? null
     }));
 
-    const response = {
+    const response: any = {
       results: formatted,
       pagination: {
-        page: parseInt(page, 10),
+        page: toInt(page as string, 1),
         limit: perPage,
         total,
         pages: Math.ceil(total / perPage)
@@ -387,18 +342,11 @@ export async function getProviders(req, res) {
       };
     }
 
-    if (geocodeError) {
-      response.error = geocodeError;
-    }
+    if (geocodeError) response.error = geocodeError;
 
     res.json(response);
   } catch (err) {
-    console.error('Provider search error:', err);
+    console.error('[ERROR] Provider search error:', err);
     res.status(500).json({ message: 'Error searching for providers' });
   }
 }
-
-// -----------------------------------------------------------------------------
-// End of file
-// -----------------------------------------------------------------------------
-
