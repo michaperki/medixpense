@@ -1,4 +1,3 @@
-
 import apiClient from './apiClient';
 import { getLogger } from '@/lib/logger';
 import { authService } from '@/services/authService';
@@ -6,6 +5,7 @@ import locationService from '@/services/locationService';
 import { procedureService } from '@/services/procedureService';
 import { notificationService } from '@/services/notificationService';
 import { searchService } from '@/services/searchService';
+import { providerService } from '@/services/providerService';
 
 // ─── Loggers ────────────────────────────────────────────────────
 const authLogger         = getLogger('auth');
@@ -13,6 +13,7 @@ const locationLogger     = getLogger('location');
 const procedureLogger    = getLogger('procedure');
 const searchLogger       = getLogger('search');
 const notificationLogger = getLogger('notification');
+const providerLogger     = getLogger('provider');
 
 // ─── AUTH ────────────────────────────────────────────────────────
 export const authApi = {
@@ -88,9 +89,17 @@ export const proceduresApi = {
     procedureLogger.debug('Get templates', params);
     return procedureService.getTemplates(params);
   },
-  getProviderProcedures: (providerId?: string, params?: any) => {
-    procedureLogger.with({ providerId }).debug('Get provider procedures');
-    return procedureService.getProviderProcedures({ providerId, ...params });
+  getProviderProcedures: ({
+    providerId,
+    ...params
+  }: {
+    providerId: string;
+    page?: number;
+    limit?: number;
+    categoryId?: string;
+    query?: string;
+  }) => {
+    return procedureService.getProviderProcedures(providerId, params);
   },
   getProcedureById: (id: string) => {
     procedureLogger.with({ id }).debug('Get procedure by ID');
@@ -122,10 +131,22 @@ export const proceduresApi = {
   },
 };
 
+// ─── PROVIDERS ───────────────────────────────────────────────────
+export const providersApi = {
+  getProviderById: (id: string) => {
+    providerLogger.with({ id }).debug('Get provider by ID');
+    return providerService.getProviderById(id);
+  },
+  getSpecialties: () => {
+    providerLogger.debug('Get specialties');
+    return providerService.getSpecialties();
+  },
+};
+
 // ─── SEARCH ──────────────────────────────────────────────────────
 export const searchApi = {
   searchProcedures: (params: any) => {
-    return apiClient.get<SearchResponse>('/search/procedures', { params });
+    return apiClient.get('/search/procedures', { params });
   },
   getStats: (templateId: string, params?: any) => {
     searchLogger.with({ templateId }).debug('Get stats');
@@ -133,7 +154,7 @@ export const searchApi = {
   },
   searchProviders: (params: any) => {
     searchLogger.with(params).info('Search providers');
-    return apiClient.get('/search/providers', { params });
+    return providerService.searchProviders(params);
   },
   getRecentSearches: (...args: any[]) => {
     searchLogger.debug('Get recent searches');
@@ -142,6 +163,10 @@ export const searchApi = {
   saveSearch: (searchData: any, ...args: any[]) => {
     searchLogger.with(searchData).info('Save search');
     return searchService?.saveSearch(searchData, ...args);
+  },
+  getSpecialties: () => {
+    searchLogger.debug('Get specialties');
+    return providerService.getSpecialties();
   },
 };
 
@@ -177,7 +202,7 @@ export const api = {
   procedures: proceduresApi,
   search: searchApi,
   notifications: notificationsApi,
+  providers: providersApi,
 };
 
 export default api;
-

@@ -1,4 +1,3 @@
-// src/components/maps/ProcedureMap.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -25,11 +24,33 @@ export default function ProcedureMap({
   selectedMarker
 }: ProcedureMapProps) {
   const [mapError, setMapError] = useState<string | null>(null);
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+  const [infoWindowPosition, setInfoWindowPosition] = useState<google.maps.LatLngLiteral | null>(null);
+  
+  // Update the selected marker when it changes from props
+  useEffect(() => {
+    if (selectedMarker) {
+      setSelectedMarkerId(selectedMarker.id);
+      // Make sure we have coordinates for the info window
+      if (selectedMarker.location?.latitude && selectedMarker.location?.longitude) {
+        setInfoWindowPosition({
+          lat: selectedMarker.location.latitude,
+          lng: selectedMarker.location.longitude
+        });
+      }
+    } else {
+      setSelectedMarkerId(null);
+      setInfoWindowPosition(null);
+    }
+  }, [selectedMarker]);
   
   // Log the API key (without showing the actual key)
   useEffect(() => {
     console.log('Google Maps API Key Status:', process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ? 'Present' : 'Missing');
-  }, []);
+    // Debug data structure of results
+    console.log('Map results:', results);
+    console.log('Selected marker:', selectedMarker);
+  }, [results, selectedMarker]);
 
   const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
@@ -43,7 +64,7 @@ export default function ProcedureMap({
   });
 
   // Default to California if no center is provided
-  const mapCenter = center || (results.length > 0
+  const mapCenter = center || (results.length > 0 && results[0].location?.latitude && results[0].location?.longitude
     ? { lat: results[0].location.latitude, lng: results[0].location.longitude }
     : { lat: 37.7749, lng: -122.4194 } // San Francisco as default
   );
@@ -83,6 +104,30 @@ export default function ProcedureMap({
     return d < 10 ? `${d.toFixed(1)} mi` : `${Math.round(d)} mi`;
   };
 
+  // Guard against empty results
+  if (!results || results.length === 0) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gray-50">
+        <p className="text-gray-500">No results to display on map</p>
+      </div>
+    );
+  }
+
+  const handleMarkerClick = (result: any) => {
+    setSelectedMarkerId(result.id);
+    setInfoWindowPosition({
+      lat: result.location.latitude,
+      lng: result.location.longitude
+    });
+    onMarkerClick?.(result);
+  };
+
+  const handleInfoWindowClose = () => {
+    setSelectedMarkerId(null);
+    setInfoWindowPosition(null);
+    onMarkerClick?.(null);
+  };
+
   return (
     <GoogleMap
       mapContainerStyle={containerStyle}
@@ -95,14 +140,20 @@ export default function ProcedureMap({
       }}
     >
       {results.map((result) => {
+        // Check if location data exists and has coordinates
+        if (!result.location?.latitude || !result.location?.longitude) {
+          console.warn('Missing coordinates for marker:', result);
+          return null;
+        }
+
         // Check if this marker is selected
-        const isSelected = selectedMarker?.id === result.id;
+        const isSelected = selectedMarkerId === result.id;
         
         return (
           <Marker
             key={result.id}
             position={{ lat: result.location.latitude, lng: result.location.longitude }}
-            onClick={() => onMarkerClick?.(result)}
+            onClick={() => handleMarkerClick(result)}
             icon={{
               path: window.google.maps.SymbolPath.CIRCLE,
               scale: isSelected ? 10 : 6,
@@ -111,38 +162,65 @@ export default function ProcedureMap({
               strokeWeight: 2,
               strokeColor: '#2563EB'
             }}
-          >
-            {/* Only render InfoWindow if we have a selectedMarker AND this marker is selected */}
-            {selectedMarker && isSelected && (
-              <InfoWindow onCloseClick={() => onMarkerClick?.(null)}>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-start">
-                    <h3 className="text-sm font-medium text-gray-900 pr-4">{result.procedure.name}</h3>
-                    <span className="text-sm font-semibold text-blue-600">{formatPrice(result.price)}</span>
-                  </div>
-                  <div className="flex space-x-2">
-                    <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">{result.procedure.category.name}</span>
-                    {result.distance !== undefined && <span className="text-xs text-gray-500">{formatDistance(result.distance)}</span>}
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-gray-200">
-                    <p className="text-xs font-medium text-gray-900">{result.location.provider.name}</p>
-                    <p className="mt-1 text-xs text-gray-500 flex items-center"><MapPinIcon className="h-3 w-3 mr-1"/>{result.location.address}, {result.location.city}</p>
-                  </div>
-                  <div className="mt-2 flex justify-between">
-                    <Link href={`/locations/${result.location.id}`} className="text-xs font-medium text-gray-700 underline">Details</Link>
-                    <Link
-                      href={`https://maps.google.com/?q=${encodeURIComponent(result.location.address + ', ' + result.location.city + ', ' + result.location.state)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-medium text-blue-600 underline"
-                    >Directions</Link>
-                  </div>
-                </div>
-              </InfoWindow>
-            )}
-          </Marker>
+          />
         );
       })}
+
+      {/* Separate InfoWindow component outside of the marker loop */}
+      {selectedMarkerId && infoWindowPosition && (
+        <InfoWindow
+          position={infoWindowPosition}
+          onCloseClick={handleInfoWindowClose}
+        >
+          <div className="space-y-2 max-w-xs">
+            {selectedMarker && (
+              <>
+                <div className="flex justify-between items-start">
+                  <h3 className="text-sm font-medium text-gray-900 pr-4">
+                    {selectedMarker.provider?.name || "Provider"}
+                  </h3>
+                  <span className="text-sm font-semibold text-blue-600">
+                    {formatPrice(selectedMarker.price)}
+                  </span>
+                </div>
+                
+                {selectedMarker.distance !== undefined && (
+                  <div className="flex space-x-2">
+                    <span className="text-xs text-gray-500">{formatDistance(selectedMarker.distance)}</span>
+                  </div>
+                )}
+                
+                <div className="mt-2 pt-2 border-t border-gray-200">
+                  <p className="text-xs font-medium text-gray-900">{selectedMarker.provider?.name || "Provider"}</p>
+                  <p className="mt-1 text-xs text-gray-500 flex items-center">
+                    <MapPinIcon className="h-3 w-3 mr-1"/>
+                    {selectedMarker.location?.city}, {selectedMarker.location?.state}
+                  </p>
+                </div>
+                
+                {selectedMarker.provider?.id && (
+                  <div className="mt-2 flex justify-between">
+                    <Link href={`/providers/${selectedMarker.provider.id}`} className="text-xs font-medium text-gray-700 underline">
+                      Details
+                    </Link>
+                    {selectedMarker.location?.city && (
+                      <Link
+                        href={`https://maps.google.com/?q=${encodeURIComponent(
+                          `${selectedMarker.location.city}, ${selectedMarker.location.state}`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium text-blue-600 underline"
+                      >
+                        Directions
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </InfoWindow>
+      )}
     </GoogleMap>
   );
 }

@@ -1,4 +1,3 @@
-
 // apps/api/src/routes/procedures.js
 import express from 'express';
 import { verifyToken, checkRole } from '../middleware/auth.js';
@@ -10,16 +9,21 @@ import {
   getProcedurePrice,
   createProcedurePrice,
   updateProcedurePrice,
-  deleteProcedurePrice
+  deleteProcedurePrice,
+  getProcedureById // Import our new controller function
 } from '../controllers/proceduresController.js';
 
 const router = express.Router();
 
-// Public
+// Public routes - no authentication required
 router.get('/categories', getCategories);
 router.get('/templates', getTemplates);
 
-// Provider (auth + role only)
+// IMPORTANT: This route must come before any other routes with parameters
+// to avoid conflicts. Make it public (no auth) so users can view procedure details
+router.get('/:id', getProcedureById);
+
+// Provider routes - authentication required
 router.get(
   '/provider',
   verifyToken,
@@ -52,13 +56,4 @@ router.delete(
   deleteProcedurePrice
 );
 
-// fallback GET /:id
-router.get(
-  '/:id',
-  verifyToken,
-  checkRole(['PROVIDER']),
-  getProcedurePrice
-);
-
 export default router;
-

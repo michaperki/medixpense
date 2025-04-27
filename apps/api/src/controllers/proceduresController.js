@@ -59,29 +59,37 @@ export async function getTemplates(req, res) {
  */
 export async function getProviderProcedures(req, res) {
   try {
-    const { locationId } = req.query;
+    // trust the authenticated user’s provider
     const providerId = req.user?.provider?.id;
     if (!providerId) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
-    // Always scope to this provider
-    const where = {
+    // build your filter
+    const whereClause = {
       location: { providerId }
     };
-
-    // Optionally filter to a single location
-    if (locationId) {
-      where.locationId = locationId;
+    if (req.query.locationId) {
+      whereClause.locationId = req.query.locationId;
     }
 
     const procedures = await prisma.procedurePrice.findMany({
-      where,
+      where: whereClause,
       include: {
         template: {
           include: { category: true }
         },
-        location: true
+        // explicitly select the fields you need
+        location: {
+          select: {
+            id: true,
+            name: true,
+            address1: true,
+            city: true,
+            state: true,
+            zipCode: true
+          }
+        }
       },
       orderBy: [
         { location: { name: 'asc' } },
@@ -89,6 +97,7 @@ export async function getProviderProcedures(req, res) {
       ]
     });
 
+    // return as { procedures: [...] } so your frontend’s `rawResponse.procedures` line still works
     res.json({ procedures });
   } catch (err) {
     console.error('Error fetching provider procedures:', err);
@@ -276,5 +285,124 @@ export async function getProceduresByLocation(req, res) {
   } catch (error) {
     console.error('Error fetching procedures for location:', error);
     return res.status(500).json({ message: 'Failed to fetch procedures' });
+  }
+}
+
+/**
+ * GET /api/procedures/:id
+ * Get a procedure template with all available provider prices
+ * This version is adjusted to work with our schema and frontend components
+ */
+export async function getProcedureById(req, res) {
+  try {
+    const { id } = req.params;
+    
+    // First, get the procedure template
+    const template = await prisma.procedureTemplate.findUnique({
+      where: { id },
+      include: {
+        category: true
+      }
+    });
+    
+    if (!template) {
+      return res.status(404).json({ message: 'Procedure not found' });
+    }
+    
+    // Log the available model fields to help with debugging
+    console.log('Available models:', Object.keys(prisma));
+    
+    // Get all procedure prices (from different providers/locations)
+    // Adjusting the include structure to account for our actual database schema
+    const prices = await prisma.procedurePrice.findMany({
+      where: { 
+        templateId: id,
+        isActive: true
+      },
+      include: {
+        location: true
+      }
+    });
+    
+    // For each price, fetch the provider separately if needed
+    const providersData = [];
+    
+    for (const price of prices) {
+      // Assuming we have a provider relationship on location
+      // If not, we'll need to adjust this based on our schema
+      let provider;
+      try {
+        if (price.location.providerId) {
+          provider = await prisma.provider.findUnique({
+            where: { id: price.location.providerId }
+          });
+        }
+      } catch (err) {
+        console.warn('Error fetching provider for location:', price.location.id, err.message);
+        // Continue without this provider
+        continue;
+      }
+      
+      // Calculate statistics for all prices
+      const priceValues = prices.map(p => p.price);
+      const stats = priceValues.length > 0 ? {
+        averagePrice: priceValues.reduce((a, b) => a + b, 0) / priceValues.length,
+        lowestPrice: Math.min(...priceValues),
+        highestPrice: Math.max(...priceValues)
+      } : {};
+      
+      // Use whatever provider fields we have available
+      providersData.push({
+        id: price.id,
+        price: price.price,
+        savingsPercent: stats.averagePrice ? Math.round(((stats.averagePrice - price.price) / stats.averagePrice) * 100) : null,
+        provider: {
+          id: provider?.id || price.location.providerId || 'unknown',
+          name: provider?.organizationName || provider?.name || 'Provider',
+          phone: provider?.phone,
+          website: provider?.website,
+          description: provider?.bio || provider?.description,
+          location: {
+            id: price.location.id,
+            address1: price.location.address1,
+            address2: price.location.address2,
+            city: price.location.city,
+            state: price.location.state,
+            zipCode: price.location.zipCode,
+            latitude: price.location.latitude,
+            longitude: price.location.longitude
+          }
+        }
+      });
+    }
+    
+    // Combine everything into a procedure object
+    const procedure = {
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      duration: template.duration,
+      preparation: template.preparation,
+      aftercare: template.aftercare,
+      category: template.category,
+      providers: providersData,
+      averagePrice: prices.length > 0 
+        ? prices.reduce((sum, p) => sum + p.price, 0) / prices.length 
+        : undefined,
+      lowestPrice: prices.length > 0 
+        ? Math.min(...prices.map(p => p.price)) 
+        : undefined,
+      highestPrice: prices.length > 0 
+        ? Math.max(...prices.map(p => p.price)) 
+        : undefined
+    };
+    
+    // Add some debugging logs
+    console.log(`Returning procedure with ${procedure.providers.length} providers`);
+    
+    res.json({ procedure });
+  } catch (err) {
+    console.error('Error fetching procedure:', err);
+    res.status(500).json({ message: 'Failed to fetch procedure details' });
   }
 }

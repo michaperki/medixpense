@@ -96,21 +96,20 @@ export default function ProceduresPage() {
           return;
         }
         
-        // Fetch using the provider ID with performance tracking
-        const proceduresResponse = await proceduresLogger.time('Fetch provider procedures', async () => {
-          return proceduresApi.getProviderProcedures(providerId);
-        });
-        
-        // Handle both object response {procedures: [...]} and direct array response [...]
-        const proceduresData = Array.isArray(proceduresResponse) 
-          ? proceduresResponse 
-          : (proceduresResponse.procedures || []);
-          
-        proceduresLogger.debug('Procedures data fetched', { 
-          count: proceduresData.length,
-          hasLocations: proceduresData.some(p => p.location?.id)
-        });
-        
+        // Add this line back in:
+        const rawResponse = await proceduresApi.getProviderProcedures({ providerId });
+
+        console.log('procedures payload →', rawResponse.procedures);
+        // instead of rawResponse.procedures || []
+        let proceduresData: Procedure[];
+        if (Array.isArray(rawResponse)) {
+          proceduresData = rawResponse;
+        } else if (rawResponse.procedures) {
+          proceduresData = rawResponse.procedures;
+        } else {
+          proceduresData = Object.values(rawResponse);
+        }
+
         setProcedures(proceduresData);
         
         // No need to fetch specific locations/categories if we have no procedures

@@ -1,4 +1,3 @@
-
 import apiClient from '@/lib/apiClient';
 import { getLogger } from '@/lib/logger';
 import { handleApiError } from '@/lib/api/handleApiError';
@@ -19,24 +18,33 @@ export interface ProcedureTemplate {
   category: ProcedureCategory;
 }
 
+export interface Provider {
+  id: string;
+  name: string;
+  phone?: string;
+  website?: string;
+  description?: string;
+  rating?: number;
+  reviewCount?: number;
+}
+
+export interface Location {
+  id: string;
+  name?: string;
+  address1?: string;
+  address2?: string;
+  city: string;
+  state: string;
+  zipCode?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
 export interface Procedure {
   id: string;
   price: number;
-  location: {
-    id: string;
-    name: string;
-    address1: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    latitude?: number;
-    longitude?: number;
-    provider?: {
-      id: string;
-      name: string;
-      rating?: number;
-      reviewCount?: number;
-    };
+  location: Location & {
+    provider?: Provider;
   };
   template: {
     id: string;
@@ -47,6 +55,31 @@ export interface Procedure {
       name: string;
     };
   };
+}
+
+// New detailed procedure type for the procedure detail page
+export interface ProcedureDetail {
+  id: string;
+  name: string;
+  description?: string;
+  duration?: string;
+  preparation?: string;
+  aftercare?: string;
+  category: {
+    id: string;
+    name: string;
+  };
+  providers: Array<{
+    id: string;
+    price: number;
+    savingsPercent?: number;
+    provider: Provider & {
+      location: Location;
+    };
+  }>;
+  averagePrice?: number;
+  lowestPrice?: number;
+  highestPrice?: number;
 }
 
 export interface CreateProcedureRequest {
@@ -92,6 +125,11 @@ export interface ProcedureResponse {
   procedure: Procedure;
 }
 
+// New response type for the detailed procedure
+export interface ProcedureDetailResponse {
+  procedure: ProcedureDetail;
+}
+
 export interface PriceStats {
   min: number;
   max: number;
@@ -117,16 +155,26 @@ export class ProcedureService {
       .catch((error) => handleApiError(error, 'getTemplates'));
   }
 
-  async getProviderProcedures(params?: { locationId?: string; categoryId?: string; query?: string; page?: number; limit?: number; }): Promise<ProceduresResponse> {
-    procedureLogger.debug('Fetching provider procedures', { params });
-    return apiClient.get<ProceduresResponse>('/procedures/provider', { params })
+  async getProviderProcedures(providerId: string, params?: {
+    page?: number;
+    limit?: number;
+    categoryId?: string;
+    query?: string;
+  }): Promise<ProceduresResponse> {
+    procedureLogger.debug('Fetching provider procedures', { providerId, params });
+    return apiClient
+      .get<ProceduresResponse>(`/providers/${providerId}/procedures`, { params })
       .catch((error) => handleApiError(error, 'getProviderProcedures'));
   }
 
-  async getProcedureById(id: string): Promise<ProcedureResponse> {
+  // Updated to use the new detailed response type
+  async getProcedureById(id: string): Promise<ProcedureDetailResponse> {
     procedureLogger.debug('Fetching procedure by ID', { id });
-    return apiClient.get<ProcedureResponse>(`/procedures/${id}`)
-      .catch((error) => handleApiError(error, 'getProcedureById'));
+    return apiClient.get<ProcedureDetailResponse>(`/procedures/${id}`)
+      .catch((error) => {
+        procedureLogger.error('Error fetching procedure', { id, error });
+        return handleApiError(error, 'getProcedureById');
+      });
   }
 
   async addPrice(data: CreateProcedureRequest): Promise<ProcedureResponse> {
@@ -168,4 +216,3 @@ export class ProcedureService {
 
 export const procedureService = new ProcedureService();
 export default procedureService;
-

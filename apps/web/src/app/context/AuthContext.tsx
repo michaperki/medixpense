@@ -91,11 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
-  const fetchProviderData = async (userId: string) => {
+  const fetchProviderData = async (userId: string, authToken: string = token || '') => {
     try {
       const response = await axios.get(`${API_BASE_URL}/providers/user/${userId}`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          Authorization: `Bearer ${authToken}`,
         },
       });
 
@@ -132,19 +132,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const { user, token: newToken } = responseData;
+      
+      // Save token first
       setToken(newToken);
-
+      localStorage.setItem("authToken", newToken);
+      
+      // Set auth header for future requests
       if (apiClient.client?.defaults?.headers) {
         apiClient.client.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
       }
-
-      if (user.role === "PROVIDER") {
-        await fetchProviderData(user.id);
-      }
-
+      
+      // Save user data
       setUser(user);
-      localStorage.setItem("authToken", newToken);
       localStorage.setItem("user", JSON.stringify(user));
+
+      // Now fetch provider data with the new token if needed
+      if (user.role === "PROVIDER") {
+        try {
+          const providerResponse = await axios.get(`${API_BASE_URL}/providers/user/${user.id}`, {
+            headers: {
+              Authorization: `Bearer ${newToken}`,  // Use the new token directly
+            },
+          });
+          
+          if (providerResponse.data) {
+            const updatedUser = { ...user, provider: providerResponse.data };
+            setUser(updatedUser);
+            localStorage.setItem("user", JSON.stringify(updatedUser));
+          }
+        } catch (providerErr) {
+          console.error("Failed to fetch provider data:", providerErr);
+          // Continue with login even if provider data fetch fails
+        }
+      }
 
       return user;
     } catch (err: any) {
