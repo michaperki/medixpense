@@ -1,8 +1,7 @@
 // apps/api/src/services/stripe.js
 import Stripe from 'stripe';
-import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+import { prisma } from '@packages/database';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Create a new Stripe customer
