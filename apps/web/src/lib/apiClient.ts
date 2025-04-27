@@ -1,6 +1,5 @@
 
-// src/lib/apiClient.ts
-import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
 import { apiLogger, createReqId, cfg } from '@/lib/logger';
 
 export interface ApiResponse<T = any> {
@@ -27,7 +26,7 @@ class ApiClient {
       timeout: 30000,
     });
     this.setupInterceptors();
-    apiLogger.info('ApiClient initialized', { baseUrl });
+    apiLogger.info('ApiClient ready', { baseUrl });
   }
 
   private setupInterceptors() {
@@ -37,37 +36,31 @@ class ApiClient {
       config.headers['x-request-id'] = reqId;
       (config as any)._reqId = reqId;
       (config as any)._t0 = performance.now();
-
+      
       if (typeof window !== 'undefined') {
         const token = localStorage.getItem('authToken');
         if (token) config.headers['Authorization'] = `Bearer ${token}`;
       }
-
-      if (cfg.group && typeof console.groupCollapsed === 'function') {
-        console.groupCollapsed(`[API ▶️] ${reqId} ${config.method?.toUpperCase()} ${config.url}`);
-        console.info('Request details', {
-          method: config.method?.toUpperCase(),
-          url: config.url,
-          params: config.params || {},
-          data: config.data || {},
-        });
-      }
-
+      
+      // Simplified logging - just a single line with minimal context
+      apiLogger.info(`▶️ ${reqId} ${config.method?.toUpperCase()} ${config.url}`, {
+        // Only show params and data if they're small enough to be meaningful
+        params: this.summarize(config.params),
+        data: this.summarize(config.data),
+      });
+      
       return config;
     });
-
+    
     this.client.interceptors.response.use(
       (res) => {
         const { _reqId, _t0 } = res.config as any;
         const ms = Math.round(performance.now() - (_t0 || 0));
-        const size = res.headers['content-length']
-          ? `${res.headers['content-length']} B`
-          : `${(JSON.stringify(res.data).length / 1024).toFixed(1)} kB`;
-
-        if (cfg.group && typeof console.groupEnd === 'function') {
-          console.groupEnd();
-        }
-
+        const size = this.getSize(res.data);
+        
+        // Single line response log with status, time and size
+        apiLogger.info(`✅ ${_reqId} →${res.status} ${ms} ms ${size}`);
+        
         return res;
       },
       (error: AxiosError) => {
@@ -76,17 +69,32 @@ class ApiClient {
         const ms = Math.round(performance.now() - (_t0 || 0));
         const status = error.response?.status || 500;
         const message = this.extractErrorMessage(error);
-        const traceId = error.response?.headers?.['x-trace-id'];
-
-        apiLogger.error(`❌ ${_reqId} ${config.url} → ${status} (${ms} ms)`, { message, traceId });
-
-        if (cfg.group && typeof console.groupEnd === 'function') {
-          console.groupEnd();
-        }
-
+        
+        // Concise error log
+        apiLogger.warn(`❌ ${_reqId} →${status} ${ms} ms`, { message });
+        
         return Promise.reject(error);
       }
     );
+  }
+
+  private summarize(obj: any) {
+    if (!obj || typeof obj !== 'object') return obj;
+    try {
+      const size = JSON.stringify(obj).length;
+      return size > 500 ? `[Payload ~${(size / 1024).toFixed(1)} kB]` : obj;
+    } catch {
+      return '[Unserializable]';
+    }
+  }
+
+  private getSize(data: any) {
+    try {
+      const size = JSON.stringify(data).length;
+      return `${(size / 1024).toFixed(1)} kB`;
+    } catch {
+      return '? kB';
+    }
   }
 
   private extractErrorMessage(error: AxiosError): string {

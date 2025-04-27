@@ -1,9 +1,12 @@
+
+// --- Cleaned ProviderDashboard.tsx ---
 'use client';
+
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/app/context/AuthContext';
 import { locationsApi, proceduresApi } from '@/lib/api';
-import { getLogger, LogContext, createReqId } from '@/lib/logger';
+import { getLogger, LogContext, cfg } from '@/lib/logger';
 import {
   MapPinIcon,
   ClipboardDocumentListIcon,
@@ -11,76 +14,74 @@ import {
   CurrencyDollarIcon
 } from '@heroicons/react/24/outline';
 
-const logger = getLogger(LogContext.RENDER);
+const log = getLogger(LogContext.RENDER);
 
 export default function ProviderDashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState({ locations: 0, procedures: 0, views: 0, searchImpressions: 0 });
-  const [loading, setLoading] = useState(true);
   const [recentLocations, setRecentLocations] = useState<any[]>([]);
   const [topProcedures, setTopProcedures] = useState<any[]>([]);
-
-  const firstRender = useRef(true);
-
-  useEffect(() => {
-    if (!firstRender.current) return;
-    firstRender.current = false;
-    logger.info('Rendering ProviderDashboard', { pathname: '/provider/dashboard', userId: user?.id });
-  }, [user]);
+  const [loading, setLoading] = useState(true);
 
   const ran = useRef(false);
 
+  // Replace the useEffect in ProviderDashboard with this implementation
   useEffect(() => {
-    const loadDashboard = async () => {
-      if (!user) {
-        logger.debug('No user available, waiting for auth');
-        return;
-      }
-
-      const timer = logger.timer('Dashboard'); // static timer label
-      const locId = createReqId('LOC');
-      const procId = createReqId('PRC');
-
-      try {
-        const locResp = await locationsApi.getAll(1, 10);
-        const locations = locResp.locations ?? [];
-        setRecentLocations(locations.slice(0, 3));
-        logger.debug(`${locId} got ${locations.length} locations`);
-
-        let procedures: any[] = [];
-        if (user.provider?.id) {
-          const procResp = await proceduresApi.getProviderProcedures(user.provider.id);
-          procedures = procResp.procedures ?? [];
-          logger.debug(`${procId} got ${procedures.length} procedures`);
-        } else {
-          logger.warn('Provider ID not available, skipping procedure fetch');
-        }
-
-        setTopProcedures(procedures.sort((a, b) => b.price - a.price).slice(0, 5));
-        setStats({
-          locations: locations.length,
-          procedures: procedures.length,
-          views: Math.floor(Math.random() * 1000),
-          searchImpressions: Math.floor(Math.random() * 5000)
-        });
-
-        logger.info('Dashboard state set', {
-          loc: locations.length,
-          proc: procedures.length
-        });
-      } catch (err) {
-        logger.error('❌ Dashboard data fetch failed', err);
-      } finally {
-        setLoading(false);
-        timer.done();
-      }
-    };
-
     if (ran.current || !user) return;
     ran.current = true;
 
-    setLoading(true);
-    loadDashboard();
+    // Single timer for entire dashboard load
+    const dashboardTimer = log.timer('ProviderDashboard boot');
+    
+    // Single info log with context
+    log.info('Initializing dashboard', { 
+      userId: user?.id?.substring(0, 8),
+      path: '/provider/dashboard'
+    });
+
+    (async () => {
+      try {
+        // Fetch locations
+        const locations = await log.time('Fetch locations', async () => {
+          const response = await locationsApi.getAll(1, 10);
+          const locations = response.locations || [];
+          setRecentLocations(locations.slice(0, 3));
+          return { count: locations.length };
+        });
+        
+        // Fetch procedures 
+        const procedures = await log.time('Fetch procedures', async () => {
+          if (!user.provider?.id) {
+            log.warn('Provider ID missing, skipping procedure fetch');
+            return { count: 0 };
+          }
+          
+          const response = await proceduresApi.getProviderProcedures(user.provider.id);
+          const procedures = response.procedures || [];
+          setTopProcedures(procedures.sort((a, b) => b.price - a.price).slice(0, 5));
+          return { count: procedures.length };
+        });
+        
+        // Update stats once at the end
+        setStats({
+          locations: locations.count,
+          procedures: procedures.count,
+          views: Math.floor(Math.random() * 1000),
+          searchImpressions: Math.floor(Math.random() * 5000)
+        });
+        
+        // Single log for final state with concise stats
+        log.info('Dashboard state ready', { 
+          locations: locations.count, 
+          procedures: procedures.count 
+        });
+      } catch (err) {
+        log.error('Dashboard data fetch failed', err);
+      } finally {
+        setLoading(false);
+        dashboardTimer.done();
+      }
+    })();
   }, [user]);
 
   if (loading) {
@@ -95,272 +96,91 @@ export default function ProviderDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Provider Dashboard</h1>
-        <div>
-          <Link
-            href="/provider/locations/new"
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-          >
-            Add Location
-          </Link>
-        </div>
+        <Link href="/provider/locations/new" className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700">
+          Add Location
+        </Link>
       </div>
 
-      {/* Stats Overview */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Locations */}
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <MapPinIcon className="h-6 w-6 text-gray-400" />
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
-                    Locations
-                  </dt>
-                  <dd>
-                    <div className="text-lg font-medium text-gray-900">
-                      {stats.locations}
-                    </div>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-          <div className="bg-gray-50 px-5 py-3">
-            <div className="text-sm">
-              <Link
-                href="/provider/locations"
-                className="font-medium text-blue-600 hover:text-blue-500"
-              >
-                View all
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        {/* Procedures */}
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <ClipboardDocumentListIcon className="h-6 w-6 text-gray-400" />
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
-                    Procedures
-                  </dt>
-                  <dd>
-                    <div className="text-lg font-medium text-gray-900">
-                      {stats.procedures}
-                    </div>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-          <div className="bg-gray-50 px-5 py-3">
-            <div className="text-sm">
-              <Link
-                href="/provider/procedures"
-                className="font-medium text-blue-600 hover:text-blue-500"
-              >
-                View all
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        {/* Profile Views */}
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <UserGroupIcon className="h-6 w-6 text-gray-400" />
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
-                    Profile Views
-                  </dt>
-                  <dd>
-                    <div className="text-lg font-medium text-gray-900">
-                      {stats.views}
-                    </div>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-          <div className="bg-gray-50 px-5 py-3">
-            <div className="text-sm">
-              <Link
-                href="/provider/analytics"
-                className="font-medium text-blue-600 hover:text-blue-500"
-              >
-                View analytics
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        {/* Search Impressions */}
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <CurrencyDollarIcon className="h-6 w-6 text-gray-400" />
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">
-                    Search Impressions
-                  </dt>
-                  <dd>
-                    <div className="text-lg font-medium text-gray-900">
-                      {stats.searchImpressions}
-                    </div>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-          <div className="bg-gray-50 px-5 py-3">
-            <div className="text-sm">
-              <Link
-                href="/provider/analytics"
-                className="font-medium text-blue-600 hover:text-blue-500"
-              >
-                View analytics
-              </Link>
-            </div>
-          </div>
-        </div>
+        <StatCard icon={<MapPinIcon className="h-6 w-6 text-gray-400" />} label="Locations" value={stats.locations} link="/provider/locations" />
+        <StatCard icon={<ClipboardDocumentListIcon className="h-6 w-6 text-gray-400" />} label="Procedures" value={stats.procedures} link="/provider/procedures" />
+        <StatCard icon={<UserGroupIcon className="h-6 w-6 text-gray-400" />} label="Profile Views" value={stats.views} link="/provider/analytics" />
+        <StatCard icon={<CurrencyDollarIcon className="h-6 w-6 text-gray-400" />} label="Search Impressions" value={stats.searchImpressions} link="/provider/analytics" />
       </div>
 
-      {/* Recent Locations */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
-        <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">
-            Your Locations
-          </h3>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">
-            Manage your practice locations
-          </p>
-        </div>
-        <ul className="divide-y divide-gray-200">
-          {recentLocations.length > 0 ? (
-            recentLocations.map((location) => (
-              <li key={location.id}>
-                <div className="px-4 py-4 sm:px-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <MapPinIcon className="h-6 w-6 text-blue-600" />
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-blue-600">{location.name}</div>
-                        <div className="text-sm text-gray-500">
-                          {location.address1}, {location.city}, {location.state} {location.zipCode}
-                        </div>
-                      </div>
-                    </div>
-                    <Link
-                      href={`/provider/locations/${location.id}/procedures`}
-                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-                    >
-                      Manage Procedures
-                    </Link>
-                  </div>
-                </div>
-              </li>
-            ))
-          ) : (
-            <li className="px-4 py-5 sm:px-6 text-center">
-              <MapPinIcon className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No locations</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                Get started by adding your first location.
-              </p>
-              <div className="mt-6">
-                <Link
-                  href="/provider/locations/new"
-                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-                >
-                  Add Location
-                </Link>
-              </div>
-            </li>
-          )}
-        </ul>
-        {recentLocations.length > 0 && (
-          <div className="px-4 py-4 sm:px-6 border-t border-gray-200 bg-gray-50">
-            <div className="text-sm text-center">
-              <Link
-                href="/provider/locations"
-                className="font-medium text-blue-600 hover:text-blue-500"
-              >
-                View all locations
-              </Link>
-            </div>
-          </div>
-        )}
-      </div>
+      <SectionList title="Your Locations" emptyText="No locations yet" emptyLink="/provider/locations/new" items={recentLocations.map(loc => ({
+        id: loc.id,
+        primary: loc.name,
+        secondary: `${loc.address1}, ${loc.city}, ${loc.state} ${loc.zipCode}`,
+        href: `/provider/locations/${loc.id}/procedures`
+      }))} />
 
-      {/* Top Procedures */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
-        <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">
-            Top Procedures
-          </h3>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">
-            Your most expensive procedures
-          </p>
+      <SectionList title="Top Procedures" emptyText="No procedures yet" emptyLink="/provider/procedures" items={topProcedures.map(proc => ({
+        id: proc.id,
+        primary: proc.template.name,
+        secondary: proc.location.name,
+        value: `$${proc.price}`
+      }))} />
+    </div>
+  );
+}
+
+function StatCard({ icon, label, value, link }: any) {
+  return (
+    <div className="bg-white overflow-hidden shadow rounded-lg">
+      <div className="p-5 flex items-center">
+        <div className="flex-shrink-0">{icon}</div>
+        <div className="ml-5 w-0 flex-1">
+          <dl>
+            <dt className="text-sm font-medium text-gray-500 truncate">{label}</dt>
+            <dd>
+              <div className="text-lg font-medium text-gray-900">{value}</div>
+            </dd>
+          </dl>
         </div>
-        <ul className="divide-y divide-gray-200">
-          {topProcedures.length > 0 ? (
-            topProcedures.map((procedure) => (
-              <li key={procedure.id}>
-                <div className="px-4 py-4 sm:px-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-medium text-blue-600">
-                        {procedure.template.name}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {procedure.location.name}
-                      </div>
-                    </div>
-                    <div className="text-sm font-semibold">${procedure.price}</div>
-                  </div>
-                </div>
-              </li>
-            ))
-          ) : (
-            <li className="px-4 py-5 sm:px-6 text-center">
-              <ClipboardDocumentListIcon className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No procedures</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                You haven't added any procedures yet.
-              </p>
-            </li>
-          )}
-        </ul>
-        {topProcedures.length > 0 && (
-          <div className="px-4 py-4 sm:px-6 border-t border-gray-200 bg-gray-50">
-            <div className="text-sm text-center">
-              <Link
-                href="/provider/procedures"
-                className="font-medium text-blue-600 hover:text-blue-500"
-              >
-                View all procedures
-              </Link>
-            </div>
-          </div>
-        )}
+      </div>
+      <div className="bg-gray-50 px-5 py-3 text-sm">
+        <Link href={link} className="font-medium text-blue-600 hover:text-blue-500">
+          View all
+        </Link>
       </div>
     </div>
   );
 }
+
+function SectionList({ title, emptyText, emptyLink, items }: any) {
+  return (
+    <div className="bg-white shadow overflow-hidden sm:rounded-md">
+      <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
+        <h3 className="text-lg leading-6 font-medium text-gray-900">{title}</h3>
+      </div>
+      <ul className="divide-y divide-gray-200">
+        {items.length > 0 ? (
+          items.map((item: any) => (
+            <li key={item.id} className="px-4 py-4 sm:px-6 flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-blue-600">{item.primary}</div>
+                {item.secondary && <div className="text-sm text-gray-500">{item.secondary}</div>}
+              </div>
+              {item.href ? (
+                <Link href={item.href} className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                  Manage
+                </Link>
+              ) : item.value && (
+                <div className="text-sm font-semibold">{item.value}</div>
+              )}
+            </li>
+          ))
+        ) : (
+          <li className="px-4 py-5 sm:px-6 text-center text-gray-500">
+            {emptyText}
+            <div className="mt-4">
+              <Link href={emptyLink} className="text-blue-600 hover:text-blue-500">Add now</Link>
+            </div>
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+}
+

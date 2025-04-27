@@ -1,6 +1,3 @@
-
-// src/app/(provider)/locations/page.tsx – adjusted for logger v2 (timer API)
-
 'use client';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
@@ -19,46 +16,29 @@ import {
   ArrowRightIcon,
 } from '@heroicons/react/24/outline';
 
-/**
- * Page-local logger (RENDER context) – v2 API
- */
 const log = getLogger(LogContext.RENDER);
-
 const LIMIT = 10;
 
 export default function LocationsPage() {
   const router = useRouter();
   const { showToast } = useToast();
-
-  /* -------------------------------------------------------------------------
-   * State
-   * --------------------------------------------------------------------- */
   const [page, setPage] = useState(1);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [locationToDelete, setLocationToDelete] = useState<Location | null>(null);
-  const [locations, setLocations]   = useState<Location[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: LIMIT, total: 0, pages: 0 });
-  const [isLoading, setIsLoading]   = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   const firstLoad = useRef(false);
 
-  /* -------------------------------------------------------------------------
-   * Helpers
-   * --------------------------------------------------------------------- */
   async function fetchLocations(currentPage: number) {
-    const timer = log.timer(
-      currentPage === page ? 'Initial locations load' : `Load page ${currentPage}`
-    );
+    const timer = log.timer(currentPage === 1 ? 'Initial locations load' : `Load page ${currentPage}`);
     try {
       const result = await locationService.getAll({ page: currentPage, limit: LIMIT });
       if (result?.locations) {
         setLocations(result.locations);
         setPagination(result.pagination ?? { page: currentPage, limit: LIMIT, total: 0, pages: 0 });
-        log.debug('Locations fetched', {
-          page: currentPage,
-          count: result.locations.length,
-          total: result.pagination?.total,
-        });
+        log.info('Locations fetched', { page: currentPage, count: result.locations.length, total: result.pagination?.total });
       }
       timer.done();
     } catch (err) {
@@ -67,51 +47,41 @@ export default function LocationsPage() {
     }
   }
 
-  /* -------------------------------------------------------------------------
-   * Effects – initial load
-   * --------------------------------------------------------------------- */
   useEffect(() => {
     if (firstLoad.current) return;
     firstLoad.current = true;
 
+    const pageTimer = log.timer('LocationsPage boot');
     setIsLoading(true);
     fetchLocations(1)
       .catch(err => {
         log.error('Failed to fetch initial locations', err);
         showToast(`Error loading locations: ${(err as Error).message}`, 'error');
       })
+      .finally(() => {
+        setIsLoading(false);
+        pageTimer.done();
+      });
+  }, [showToast]);
+
+  const handlePageChange = useCallback((newPage: number) => {
+    log.info('Page change requested', { from: page, to: newPage });
+    setIsLoading(true);
+    setPage(newPage);
+    fetchLocations(newPage)
+      .catch(err => {
+        log.error('Failed to change page', err);
+        showToast(`Error: ${(err as Error).message}`, 'error');
+      })
       .finally(() => setIsLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [page, showToast]);
 
-  /* -------------------------------------------------------------------------
-   * Pagination handler
-   * --------------------------------------------------------------------- */
-  const handlePageChange = useCallback(
-    (newPage: number) => {
-      log.debug('Page change requested', { from: page, to: newPage });
-      setIsLoading(true);
-      setPage(newPage);
-      fetchLocations(newPage)
-        .catch(err => {
-          log.error('Failed to change page', err);
-          showToast(`Error: ${(err as Error).message}`, 'error');
-        })
-        .finally(() => setIsLoading(false));
-    },
-    [page, showToast]
-  );
-
-  /* -------------------------------------------------------------------------
-   * Delete location flow
-   * --------------------------------------------------------------------- */
   const handleDeleteLocation = async (id: string) => {
     const timer = log.timer('Delete location');
     try {
       await locationService.delete(id);
       timer.done();
       showToast('Location deleted successfully', 'success');
-      // refresh current page
       setIsLoading(true);
       await fetchLocations(page);
     } catch (err) {
@@ -126,7 +96,7 @@ export default function LocationsPage() {
   };
 
   const handleDeleteClick = useCallback((loc: Location) => {
-    log.debug('Delete modal opened', { id: loc.id });
+    log.info('Delete modal opened', { id: loc.id });
     setLocationToDelete(loc);
     setDeleteModalOpen(true);
   }, []);
@@ -140,19 +110,12 @@ export default function LocationsPage() {
     setLocationToDelete(null);
   }, []);
 
-  /* -------------------------------------------------------------------------
-   * Render
-   * --------------------------------------------------------------------- */
   useEffect(() => {
     if (!isLoading) {
-      log.debug('Rendering list', {
-        page,
-        loaded: locations.length,
-        totalPages: pagination.pages,
-      });
+      log.info('Rendering locations list', { page, loaded: locations.length, totalPages: pagination.pages });
     }
   }, [isLoading, locations.length, page, pagination.pages]);
-  
+
   return (
     <div className="space-y-6">
       <div className="md:flex md:items-center md:justify-between">
