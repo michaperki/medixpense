@@ -22,9 +22,9 @@ export default function LoginPage() {
       router.push(redirect);
     } catch (err: any) {
       if (err.response?.data?.errors?.length) {
-        showToast(err.response.data.errors[0].msg, 'error');  // Show error toast
+        showToast(err.response.data.errors[0].msg, 'error');
       } else {
-        showToast(err.message || 'Login failed', 'error');  // Show error toast
+        showToast(err.response?.data?.message || err.message || 'Login failed', 'error');
       }
     }
   };
