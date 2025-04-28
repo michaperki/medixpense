@@ -21,7 +21,8 @@
     "prisma:fix": "rimraf packages/database/node_modules/.prisma && cd packages/database && npx prisma generate",
     "test": "jest",
     "test:watch": "jest --watch",
-    "lint": "eslint . --ext .ts,.tsx"
+    "lint": "eslint . --ext .ts,.tsx",
+    "copy:snapshot": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/copy-snapshot.ps1 --"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

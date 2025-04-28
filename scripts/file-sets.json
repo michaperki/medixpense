@@ -1,0 +1,87 @@
+
+{
+  "default": [
+    "docker-compose.yml",
+    "infrastructure/terraform/main.tf",
+    "apps/api/package.json",
+    "apps/api/src/index.ts",
+    "apps/api/src/controllers/searchController.ts",
+    "apps/api/src/routes/search.ts",
+    "docs/LOGS.md",
+    "apps/web/src/lib/apiClient.ts",
+    "packages/database/lib/prisma.ts",
+    "packages/logger/index.ts"
+  ],
+  "profile": [
+    "apps/api/package.json",
+    "apps/api/src/controllers/profileController.ts",
+    "apps/api/src/controllers/settingsController.ts",
+    "apps/api/src/routes/profile.ts",
+    "apps/api/src/routes/settings.ts",
+    "apps/api/src/validation/profile.ts",
+    "apps/api/src/validation/settings.ts",
+    "apps/web/src/app/context/AuthContext.tsx",
+    "apps/web/src/app/provider/profile/page.tsx",
+    "apps/web/src/app/provider/settings/page.tsx",
+    "apps/web/src/components/profile/ProfileForm.jsx",
+    "apps/web/src/components/profile/ProfileHeader.jsx",
+    "apps/web/src/components/settings/SettingsForm.jsx",
+    "apps/web/src/components/settings/SecuritySettings.jsx",
+    "apps/web/src/components/settings/NotificationSettings.jsx",
+    "apps/web/src/services/profileService.ts",
+    "apps/web/src/services/settingsService.ts",
+    "apps/web/src/lib/api.ts",
+    "apps/web/src/lib/apiClient.ts"
+  ],
+  "auth": [
+    "apps/api/src/controllers/authController.ts",
+    "apps/api/src/routes/auth.ts",
+    "apps/api/src/validation/auth.ts",
+    "apps/api/src/middleware/auth.ts",
+    "apps/web/src/app/(public)/login/page.tsx",
+    "apps/web/src/app/(public)/register/page.tsx",
+    "apps/web/src/services/authService.ts",
+    "apps/web/src/app/context/AuthContext.tsx"
+  ],
+  "locations": [
+    "apps/api/src/controllers/locationsController.ts",
+    "apps/api/src/routes/locations.ts",
+    "apps/api/src/validation/locations.ts",
+    "apps/web/src/components/providers/LocationList.tsx",
+    "apps/web/src/components/providers/LocationForm.jsx",
+    "apps/web/src/app/provider/locations/page.tsx",
+    "apps/web/src/app/provider/locations/[locationId]/page.tsx",
+    "apps/web/src/app/provider/locations/[locationId]/procedures/page.tsx",
+    "apps/web/src/app/provider/locations/[locationId]/add-procedure/page.tsx",
+    "apps/web/src/services/locationService.ts"
+  ],
+  "procedures": [
+    "apps/api/src/controllers/proceduresController.ts",
+    "apps/api/src/routes/procedures.ts",
+    "apps/api/src/validation/procedures.ts",
+    "apps/web/src/components/providers/ProcedureList.jsx",
+    "apps/web/src/components/providers/ProcedureForm.jsx",
+    "apps/web/src/app/provider/procedures/page.tsx",
+    "apps/web/src/app/provider/procedures/[procedureId]/edit/page.tsx",
+    "apps/web/src/services/procedureService.ts"
+  ],
+  "search": [
+    "apps/api/src/controllers/searchController.ts",
+    "apps/api/src/routes/search.ts",
+    "apps/web/src/app/(public)/search/page.tsx",
+    "apps/web/src/components/maps/ProcedureMap.tsx",
+    "apps/web/src/services/searchService.ts",
+    "apps/web/src/hooks/useQuery.ts"
+  ],
+  "provider": [
+    "apps/api/src/controllers/providersController.ts",
+    "apps/api/src/routes/providers.ts",
+    "apps/web/src/app/(public)/providers/page.tsx",
+    "apps/web/src/app/(public)/providers/[id]/page.tsx",
+    "apps/web/src/services/providerService.ts",
+    "apps/web/src/hooks/useLocationForm.js",
+    "apps/web/src/components/providers/LocationList.tsx",
+    "apps/web/src/components/providers/LocationForm.jsx"
+  ]
+}
+
