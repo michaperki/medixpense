@@ -1,8 +1,11 @@
 import { Request, Response } from 'express';
-import { Prisma } from '@prisma/client';
 import { geocodeAddress } from '../services/geocoding.js';
 import { calculateDistance } from '../utils/distance.js';
 import { prisma } from '@packages/database';
+// Import Prisma namespace for TypeScript type checking only
+import type { PrismaClient } from '@prisma/client';
+// Define Prisma namespace for type usage
+type Prisma = PrismaClient;
 
 // Helpers
 const toInt = (value: string | string[] | undefined, defaultValue = 0) =>
@@ -59,9 +62,9 @@ export async function getProcedures(req: Request, res: Response): Promise<void> 
         ...(normalizedQuery
           ? {
               OR: [
-                { name: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } },
-                { description: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } },
-                { searchTerms: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } }
+                { name: { contains: normalizedQuery, mode: 'insensitive' } },
+                { description: { contains: normalizedQuery, mode: 'insensitive' } },
+                { searchTerms: { contains: normalizedQuery, mode: 'insensitive' } }
               ]
             }
           : {})
@@ -283,8 +286,8 @@ export async function getProviders(req: Request, res: Response): Promise<void> {
       ...(normalizedQuery
         ? {
             OR: [
-              { organizationName: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } },
-              { bio: { contains: normalizedQuery, mode: Prisma.QueryMode.insensitive } }
+              { organizationName: { contains: normalizedQuery, mode: 'insensitive' } },
+              { bio: { contains: normalizedQuery, mode: 'insensitive' } }
             ]
           }
         : {})
