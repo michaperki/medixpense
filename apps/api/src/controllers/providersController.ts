@@ -40,13 +40,13 @@ interface ProcedurePrice {
   isActive: boolean;
   template: {
     name: string;
-    description?: string;
+    description?: string | null;
     category: {
       id: string;
       name: string;
     };
   };
-  averageMarketPrice?: number;
+  averageMarketPrice?: number | null;
 }
 
 interface SpecialtyRow {

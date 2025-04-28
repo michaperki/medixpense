@@ -1,44 +1,52 @@
+
 import { Request, Response } from 'express';
 import { geocodeAddress } from '../services/geocoding.js';
 import { calculateDistance } from '../utils/distance.js';
 import { prisma } from '@packages/database';
-// Import Prisma namespace for TypeScript type checking only
-import type { PrismaClient } from '@prisma/client';
-// Define Prisma namespace for type usage
-type Prisma = PrismaClient;
+import { ProcedurePrice, Provider } from '@prisma/client';
 
-// Helpers
 const toInt = (value: string | string[] | undefined, defaultValue = 0) =>
   parseInt(Array.isArray(value) ? value[0] : value ?? '', 10) || defaultValue;
 
-type ProcedureWithDistance = Prisma.ProcedurePriceGetPayload<{
-  include: {
-    template: { include: { category: true } };
-    location: { include: { provider: true } };
+type ProcedurePriceWithLocation = ProcedurePrice & {
+  location: {
+    id: string;
+    name: string | null;
+    address1: string | null;
+    city: string | null;
+    state: string | null;
+    zipCode: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    provider: {
+      id: string;
+      organizationName: string;
+      logoUrl: string | null;
+    };
   };
-}> & { distance?: number };
+  template: {
+    id: string;
+    name: string;
+    description: string | null;
+    category: {
+      id: string;
+      name: string;
+    };
+  };
+};
 
-// Define more types for improved type safety
-type ProcedurePrice = Prisma.ProcedurePriceGetPayload<{
-  include: { location: true };
-}>;
+type ProcedureWithDistance = ProcedurePriceWithLocation & { distance?: number };
 
-// Define provider type with locations
-interface ProviderWithLocations {
-  id: string;
-  organizationName: string;
-  bio?: string | null;
-  logoUrl?: string | null;
-  website?: string | null;
+interface ProviderWithLocations extends Provider {
   locations: Array<{
     id: string;
-    name?: string | null;
-    address1?: string | null;
-    city?: string | null;
-    state?: string | null;
-    zipCode?: string | null;
-    latitude?: number | null;
-    longitude?: number | null;
+    name: string | null;
+    address1: string | null;
+    city: string | null;
+    state: string | null;
+    zipCode: string | null;
+    latitude: number | null;
+    longitude: number | null;
     distance?: number | null;
   }>;
   closestLocationDistance?: number | null;
@@ -47,7 +55,6 @@ interface ProviderWithLocations {
 export async function getProcedures(req: Request, res: Response): Promise<void> {
   try {
     const { query, categoryId, location, distance, sort, page, limit } = req.query;
-
     const perPage = toInt(limit as string, 20);
     const skip = (toInt(page as string, 1) - 1) * perPage;
     const searchRadius = toInt(distance as string, 50);
@@ -87,16 +94,16 @@ export async function getProcedures(req: Request, res: Response): Promise<void> 
 
     let userCoords: { latitude: number; longitude: number } | null = null;
     let geocodeError: string | null = null;
-    let items: ProcedureWithDistance[] = procedures;
+    let items: ProcedureWithDistance[] = procedures as ProcedureWithDistance[];
 
     if (location && typeof location === 'string') {
       userCoords = await geocodeAddress(location);
       if (userCoords) {
-        items = procedures.flatMap((p: ProcedureWithDistance) => {
+        items = procedures.flatMap((p) => {
           if (!p.location?.latitude || !p.location?.longitude) return [];
           const d = calculateDistance(
-            userCoords!.latitude,
-            userCoords!.longitude,
+            userCoords.latitude,
+            userCoords.longitude,
             p.location.latitude,
             p.location.longitude
           );
@@ -128,12 +135,10 @@ export async function getProcedures(req: Request, res: Response): Promise<void> 
         id: item.template.id,
         name: item.template.name,
         description: item.template.description,
-        category: item.template.category
-          ? {
-              id: item.template.category.id,
-              name: item.template.category.name
-            }
-          : null
+        category: item.template.category ? {
+          id: item.template.category.id,
+          name: item.template.category.name
+        } : null
       },
       provider: {
         id: item.location.provider.id,
@@ -193,8 +198,7 @@ export async function getStats(req: Request, res: Response): Promise<void> {
       where: { id: templateId },
       include: { category: true }
     });
-    
-    // Fix: Use void expression to satisfy Promise<void> return type
+
     if (!template) {
       res.status(404).json({ message: 'Procedure template not found' });
       return;
@@ -218,22 +222,16 @@ export async function getStats(req: Request, res: Response): Promise<void> {
     if (location && typeof location === 'string') {
       userCoords = await geocodeAddress(location);
       if (userCoords) {
-        filtered = prices.filter((p: ProcedurePrice) => {
-          if (!p.location?.latitude || !p.location?.longitude) return false;
-          const d = calculateDistance(
-            userCoords!.latitude,
-            userCoords!.longitude,
-            p.location.latitude,
-            p.location.longitude
-          );
-          return d <= searchRadius;
-        });
+        filtered = prices.filter(p =>
+          p.location?.latitude && p.location?.longitude &&
+          calculateDistance(userCoords.latitude, userCoords.longitude, p.location.latitude, p.location.longitude) <= searchRadius
+        );
       } else {
         geocodeError = 'Could not geocode the provided location';
       }
     }
 
-    const pricesList = filtered.map((p: ProcedurePrice) => p.price);
+    const pricesList = filtered.map(p => p.price);
     const sortedPrices = [...pricesList].sort((a, b) => a - b);
 
     const median = pricesList.length
@@ -247,7 +245,7 @@ export async function getStats(req: Request, res: Response): Promise<void> {
       min: pricesList.length ? Math.min(...pricesList) : 0,
       max: pricesList.length ? Math.max(...pricesList) : 0,
       average: pricesList.length
-        ? Math.round(pricesList.reduce((sum: number, price: number) => sum + price, 0) / pricesList.length)
+        ? Math.round(pricesList.reduce((sum, price) => sum + price, 0) / pricesList.length)
         : 0,
       median
     };
@@ -274,7 +272,6 @@ export async function getStats(req: Request, res: Response): Promise<void> {
 export async function getProviders(req: Request, res: Response): Promise<void> {
   try {
     const { query, location, distance, page, limit } = req.query;
-
     const perPage = toInt(limit as string, 20);
     const skip = (toInt(page as string, 1) - 1) * perPage;
     const searchRadius = toInt(distance as string, 50);
@@ -303,7 +300,7 @@ export async function getProviders(req: Request, res: Response): Promise<void> {
       prisma.provider.count({ where })
     ]);
 
-    let results = providers;
+    let results = providers as ProviderWithLocations[];
     let userCoords: { latitude: number; longitude: number } | null = null;
     let geocodeError: string | null = null;
 
@@ -311,37 +308,37 @@ export async function getProviders(req: Request, res: Response): Promise<void> {
       userCoords = await geocodeAddress(location);
       if (userCoords) {
         results = providers
-          .map((p: ProviderWithLocations) => {
-            const locs = p.locations.map((loc: any) => {
+          .map(p => {
+            const locs = p.locations.map(loc => {
               if (!loc.latitude || !loc.longitude) return { ...loc, distance: null };
               return {
                 ...loc,
-                distance: calculateDistance(userCoords!.latitude, userCoords!.longitude, loc.latitude, loc.longitude)
+                distance: calculateDistance(userCoords.latitude, userCoords.longitude, loc.latitude, loc.longitude)
               };
             });
             const closest = locs
-              .filter((l: any) => l.distance !== null)
-              .sort((a: any, b: any) => (a.distance! - b.distance!))[0];
+              .filter(l => l.distance !== null)
+              .sort((a, b) => (a.distance! - b.distance!))[0];
             return {
               ...p,
               locations: locs,
               closestLocationDistance: closest?.distance ?? null
             };
           })
-          .filter((p: ProviderWithLocations) => p.closestLocationDistance !== null && p.closestLocationDistance! <= searchRadius)
-          .sort((a: ProviderWithLocations, b: ProviderWithLocations) => (a.closestLocationDistance! - b.closestLocationDistance!));
+          .filter(p => p.closestLocationDistance !== null && p.closestLocationDistance! <= searchRadius)
+          .sort((a, b) => (a.closestLocationDistance! - b.closestLocationDistance!));
       } else {
         geocodeError = 'Could not geocode the provided location';
-        results = providers.map((p: ProviderWithLocations) => ({
+        results = providers.map(p => ({
           ...p,
-          locations: p.locations.map((loc: any) => ({ ...loc, distance: null })),
+          locations: p.locations.map(loc => ({ ...loc, distance: null })),
           closestLocationDistance: null
         }));
       }
     }
 
-    const formatted = results.map((p: ProviderWithLocations) => {
-      const closestLocation = p.locations[0]; // safe: guaranteed at least one active location
+    const formatted = results.map(p => {
+      const closestLocation = p.locations[0];
       return {
         id: p.id,
         name: p.organizationName,
@@ -357,9 +354,9 @@ export async function getProviders(req: Request, res: Response): Promise<void> {
           zipCode: closestLocation.zipCode,
           latitude: closestLocation.latitude,
           longitude: closestLocation.longitude,
-          distance: (closestLocation as any).distance ?? null
+          distance: closestLocation.distance ?? null
         },
-        distance: (p as any).closestLocationDistance ?? null
+        distance: p.closestLocationDistance ?? null
       };
     });
 
@@ -391,3 +388,4 @@ export async function getProviders(req: Request, res: Response): Promise<void> {
     res.status(500).json({ message: 'Error searching for providers' });
   }
 }
+

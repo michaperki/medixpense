@@ -1,21 +1,11 @@
+
 {
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "module": "ESNext",
-    "target": "ES2020",
-    "moduleResolution": "node",
     "outDir": "dist",
-    "rootDir": "src",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "allowJs": true,
-    "baseUrl": ".",
-    "paths": {
-      "@packages/database": ["packages/database/lib/prisma.ts"],
-      "@packages/database/*": ["packages/database/lib/*"]
-    }
+    "rootDir": "src"
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]
 }
+
