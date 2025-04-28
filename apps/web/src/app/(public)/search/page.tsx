@@ -247,9 +247,14 @@ export default function SearchPage() {
                     <Link href={`/procedures/${r.procedure.id}`} className="hover:underline">{r.procedure.name}</Link>
                   </h3>
                   <p className="text-sm text-gray-500 line-clamp-2">{r.procedure.description}</p>
-                  <div className="mt-1 flex space-x-2 text-sm">
+                  <div className="mt-1 flex flex-wrap gap-2 text-sm">
                     <span className="bg-gray-100 px-2 py-0.5 rounded">{r.procedure.category.name}</span>
-                    {r.distance && <span className="bg-gray-100 px-2 py-0.5 rounded">{formatMiles(r.distance)}</span>}
+                    <span className="bg-gray-100 px-2 py-0.5 rounded">
+                      {r.location.city}, {r.location.state}
+                    </span>
+                    {r.distance && 
+                      <span className="bg-gray-100 px-2 py-0.5 rounded">{formatMiles(r.distance)}</span>
+                    }
                   </div>
                 </div>
                 <div className="mt-3 md:mt-0 text-right whitespace-nowrap">

@@ -118,7 +118,7 @@ export default function ProvidersPage() {
         });
         
         console.log('Provider search results:', res);
-        setProviders(Array.isArray(res.providers) ? res.providers : []);
+        setProviders(Array.isArray((res as any).results) ? (res as any).results : []);
         setPagination(res.pagination ?? { page: pg, limit: 20, total: 0, pages: 0 });
         
         if (res.data?.searchLocation) {

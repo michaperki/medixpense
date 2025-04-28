@@ -1,8 +1,60 @@
 import { Request, Response } from 'express';
 import { prisma } from '@packages/database';
 
+// Define interfaces for type safety
+interface Location {
+  id: string;
+  name?: string;
+  address1?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+interface Provider {
+  id: string;
+  userId?: string;
+  organizationName: string;
+  bio?: string;
+  logoUrl?: string;
+  website?: string;
+  phone?: string;
+  locations: Location[];
+  mission?: string;
+  email?: string;
+  yearEstablished?: number;
+  licensingInfo?: string;
+  insuranceAccepted?: string[];
+  specialties?: string[];
+  services?: string[];
+  reviewCount?: number;
+  rating?: number;
+}
+
+interface ProcedurePrice {
+  id: string;
+  price?: number;
+  locationId: string;
+  isActive: boolean;
+  template: {
+    name: string;
+    description?: string;
+    category: {
+      id: string;
+      name: string;
+    };
+  };
+  averageMarketPrice?: number;
+}
+
+interface SpecialtyRow {
+  specialties: string[] | null;
+}
+
 // Get provider by userId
-export const getProviderByUserId = async (req: Request, res: Response) => {
+export const getProviderByUserId = async (req: Request, res: Response): Promise<void> => {
   const { userId } = req.params;
 
   try {
@@ -11,7 +63,11 @@ export const getProviderByUserId = async (req: Request, res: Response) => {
       include: { locations: true },
     });
 
-    if (!provider) return res.status(404).json({ message: 'Provider not found' });
+    if (!provider) {
+      res.status(404).json({ message: 'Provider not found' });
+      return;
+    }
+
     res.json(provider);
   } catch (err) {
     console.error('Error fetching provider by userId:', err);
@@ -20,7 +76,7 @@ export const getProviderByUserId = async (req: Request, res: Response) => {
 };
 
 // Get provider procedures
-export const getProviderProcedures = async (req: Request, res: Response) => {
+export const getProviderProcedures = async (req: Request, res: Response): Promise<void> => {
   const { providerId } = req.params;
 
   try {
@@ -53,12 +109,14 @@ export const getProviderProcedures = async (req: Request, res: Response) => {
 };
 
 // Get specialties
-export const getSpecialties = async (_req: Request, res: Response) => {
+export const getSpecialties = async (_req: Request, res: Response): Promise<void> => {
   try {
-    const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT specialties FROM "providers"`);
+    // Fix: Remove type parameter from $queryRawUnsafe and use type assertion instead
+    const rows = await prisma.$queryRawUnsafe(`SELECT specialties FROM "providers"`) as SpecialtyRow[];
 
     const specialties = [...new Set(
-      rows.flatMap(row => Array.isArray(row.specialties) ? row.specialties : [])
+      // Fix: Add type to row parameter
+      rows.flatMap((row: SpecialtyRow) => Array.isArray(row.specialties) ? row.specialties : [])
     )].sort();
 
     res.json({ specialties });
@@ -69,27 +127,32 @@ export const getSpecialties = async (_req: Request, res: Response) => {
 };
 
 // Get provider by Id
-export const getProviderById = async (req: Request, res: Response) => {
+export const getProviderById = async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
 
   try {
     const provider = await prisma.provider.findUnique({
       where: { id },
       include: { locations: true },
-    });
+    }) as Provider | null;
 
-    if (!provider) return res.status(404).json({ message: 'Provider not found' });
+    if (!provider) {
+      res.status(404).json({ message: 'Provider not found' });
+      return;
+    }
 
     const procedures = await prisma.procedurePrice.findMany({
-      where: { locationId: { in: provider.locations.map(loc => loc.id) }, isActive: true },
+      // Fix: Add type to loc parameter
+      where: { locationId: { in: provider.locations.map((loc: Location) => loc.id) }, isActive: true },
       include: {
         template: { include: { category: true } },
       },
     });
 
-    const formattedProcedures = procedures.map(proc => {
+    // Fix: Add type to proc parameter
+    const formattedProcedures = procedures.map((proc: ProcedurePrice) => {
       let savingsPercent: number | null = null;
-      const avgMarketPrice = (proc as any).averageMarketPrice;
+      const avgMarketPrice = proc.averageMarketPrice;
       if (avgMarketPrice && proc.price) {
         savingsPercent = Math.round(((avgMarketPrice - proc.price) / avgMarketPrice) * 100);
       }
@@ -108,18 +171,18 @@ export const getProviderById = async (req: Request, res: Response) => {
       id: provider.id,
       name: provider.organizationName,
       description: provider.bio || '',
-      mission: (provider as any).mission || '',
+      mission: provider.mission || '',
       logoUrl: provider.logoUrl,
       website: provider.website,
       phone: provider.phone,
-      email: (provider as any).email || '',
-      yearEstablished: (provider as any).yearEstablished || null,
-      licensingInfo: (provider as any).licensingInfo || '',
-      insuranceAccepted: (provider as any).insuranceAccepted || [],
-      specialties: (provider as any).specialties || [],
-      services: (provider as any).services || [],
-      reviewCount: (provider as any).reviewCount || 0,
-      rating: (provider as any).rating || 0,
+      email: provider.email || '',
+      yearEstablished: provider.yearEstablished || null,
+      licensingInfo: provider.licensingInfo || '',
+      insuranceAccepted: provider.insuranceAccepted || [],
+      specialties: provider.specialties || [],
+      services: provider.services || [],
+      reviewCount: provider.reviewCount || 0,
+      rating: provider.rating || 0,
       locations: provider.locations,
       procedures: formattedProcedures,
     };
@@ -132,7 +195,7 @@ export const getProviderById = async (req: Request, res: Response) => {
 };
 
 // Search providers
-export const searchProviders = async (req: Request, res: Response) => {
+export const searchProviders = async (req: Request, res: Response): Promise<void> => {
   const {
     query,
     location,
@@ -169,9 +232,10 @@ export const searchProviders = async (req: Request, res: Response) => {
       orderBy: { organizationName: 'asc' },
       skip,
       take: limitNum,
-    });
+    }) as Provider[];
 
-    const formattedProviders = providers.map(provider => {
+    // Fix: Add type to provider parameter
+    const formattedProviders = providers.map((provider: Provider) => {
       const primaryLocation = provider.locations[0] || {};
 
       return {
@@ -181,8 +245,8 @@ export const searchProviders = async (req: Request, res: Response) => {
         logoUrl: provider.logoUrl,
         website: provider.website,
         phone: provider.phone,
-        reviewCount: (provider as any).reviewCount || 0,
-        rating: (provider as any).rating || 0,
+        reviewCount: provider.reviewCount || 0,
+        rating: provider.rating || 0,
         location: {
           id: primaryLocation.id || '',
           city: primaryLocation.city || '',
@@ -192,7 +256,7 @@ export const searchProviders = async (req: Request, res: Response) => {
           latitude: primaryLocation.latitude,
           longitude: primaryLocation.longitude,
         },
-        specialties: (provider as any).specialties || [],
+        specialties: provider.specialties || [],
       };
     });
 
@@ -209,3 +273,37 @@ export const searchProviders = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Failed to search providers' });
   }
 };
+
+// Get public provider profile
+export async function getPublicProviderProfile(req: Request, res: Response): Promise<void> {
+  try {
+    const { providerId } = req.params;
+    
+    const provider = await prisma.provider.findUnique({
+      where: { id: providerId },
+      select: {
+        id: true,
+        organizationName: true,
+        bio: true,
+        website: true,
+        phone: true,
+        logoUrl: true,
+        address: true,
+        city: true,
+        state: true,
+        zipCode: true,
+        createdAt: true,
+      }
+    });
+    
+    if (!provider) {
+      res.status(404).json({ message: 'Provider profile not found' });
+      return;
+    }
+    
+    res.json(provider);
+  } catch (err) {
+    console.error('Error fetching public provider profile:', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}

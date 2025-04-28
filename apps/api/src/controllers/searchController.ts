@@ -1,4 +1,3 @@
-
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { geocodeAddress } from '../services/geocoding.js';
@@ -16,7 +15,33 @@ type ProcedureWithDistance = Prisma.ProcedurePriceGetPayload<{
   };
 }> & { distance?: number };
 
-export async function getProcedures(req: Request, res: Response) {
+// Define more types for improved type safety
+type ProcedurePrice = Prisma.ProcedurePriceGetPayload<{
+  include: { location: true };
+}>;
+
+// Define provider type with locations
+interface ProviderWithLocations {
+  id: string;
+  organizationName: string;
+  bio?: string | null;
+  logoUrl?: string | null;
+  website?: string | null;
+  locations: Array<{
+    id: string;
+    name?: string | null;
+    address1?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zipCode?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    distance?: number | null;
+  }>;
+  closestLocationDistance?: number | null;
+}
+
+export async function getProcedures(req: Request, res: Response): Promise<void> {
   try {
     const { query, categoryId, location, distance, sort, page, limit } = req.query;
 
@@ -64,7 +89,7 @@ export async function getProcedures(req: Request, res: Response) {
     if (location && typeof location === 'string') {
       userCoords = await geocodeAddress(location);
       if (userCoords) {
-        items = procedures.flatMap(p => {
+        items = procedures.flatMap((p: ProcedureWithDistance) => {
           if (!p.location?.latitude || !p.location?.longitude) return [];
           const d = calculateDistance(
             userCoords!.latitude,
@@ -156,7 +181,7 @@ export async function getProcedures(req: Request, res: Response) {
   }
 }
 
-export async function getStats(req: Request, res: Response) {
+export async function getStats(req: Request, res: Response): Promise<void> {
   try {
     const { templateId } = req.params;
     const { location, distance } = req.query;
@@ -165,7 +190,12 @@ export async function getStats(req: Request, res: Response) {
       where: { id: templateId },
       include: { category: true }
     });
-    if (!template) return res.status(404).json({ message: 'Procedure template not found' });
+    
+    // Fix: Use void expression to satisfy Promise<void> return type
+    if (!template) {
+      res.status(404).json({ message: 'Procedure template not found' });
+      return;
+    }
 
     const searchRadius = toInt(distance as string, 50);
 
@@ -185,7 +215,7 @@ export async function getStats(req: Request, res: Response) {
     if (location && typeof location === 'string') {
       userCoords = await geocodeAddress(location);
       if (userCoords) {
-        filtered = prices.filter(p => {
+        filtered = prices.filter((p: ProcedurePrice) => {
           if (!p.location?.latitude || !p.location?.longitude) return false;
           const d = calculateDistance(
             userCoords!.latitude,
@@ -200,7 +230,7 @@ export async function getStats(req: Request, res: Response) {
       }
     }
 
-    const pricesList = filtered.map(p => p.price);
+    const pricesList = filtered.map((p: ProcedurePrice) => p.price);
     const sortedPrices = [...pricesList].sort((a, b) => a - b);
 
     const median = pricesList.length
@@ -214,7 +244,7 @@ export async function getStats(req: Request, res: Response) {
       min: pricesList.length ? Math.min(...pricesList) : 0,
       max: pricesList.length ? Math.max(...pricesList) : 0,
       average: pricesList.length
-        ? Math.round(pricesList.reduce((sum, price) => sum + price, 0) / pricesList.length)
+        ? Math.round(pricesList.reduce((sum: number, price: number) => sum + price, 0) / pricesList.length)
         : 0,
       median
     };
@@ -238,7 +268,7 @@ export async function getStats(req: Request, res: Response) {
   }
 }
 
-export async function getProviders(req: Request, res: Response) {
+export async function getProviders(req: Request, res: Response): Promise<void> {
   try {
     const { query, location, distance, page, limit } = req.query;
 
@@ -248,7 +278,7 @@ export async function getProviders(req: Request, res: Response) {
     const normalizedQuery = typeof query === 'string' ? query.trim().toLowerCase() : '';
 
     const where = {
-      subscriptionStatus: { equals: 'ACTIVE' as const }, // ✅ fix enum typing
+      subscriptionStatus: 'ACTIVE',
       locations: { some: { isActive: true } },
       ...(normalizedQuery
         ? {
@@ -278,8 +308,8 @@ export async function getProviders(req: Request, res: Response) {
       userCoords = await geocodeAddress(location);
       if (userCoords) {
         results = providers
-          .map(p => {
-            const locs = p.locations.map(loc => {
+          .map((p: ProviderWithLocations) => {
+            const locs = p.locations.map((loc: any) => {
               if (!loc.latitude || !loc.longitude) return { ...loc, distance: null };
               return {
                 ...loc,
@@ -287,40 +317,48 @@ export async function getProviders(req: Request, res: Response) {
               };
             });
             const closest = locs
-              .filter(l => l.distance !== null)
-              .sort((a, b) => (a.distance! - b.distance!))[0];
+              .filter((l: any) => l.distance !== null)
+              .sort((a: any, b: any) => (a.distance! - b.distance!))[0];
             return {
               ...p,
               locations: locs,
               closestLocationDistance: closest?.distance ?? null
             };
           })
-          .filter(p => p.closestLocationDistance !== null && p.closestLocationDistance! <= searchRadius)
-          .sort((a, b) => (a.closestLocationDistance! - b.closestLocationDistance!));
+          .filter((p: ProviderWithLocations) => p.closestLocationDistance !== null && p.closestLocationDistance! <= searchRadius)
+          .sort((a: ProviderWithLocations, b: ProviderWithLocations) => (a.closestLocationDistance! - b.closestLocationDistance!));
       } else {
         geocodeError = 'Could not geocode the provided location';
-        results = providers.map(p => ({
+        results = providers.map((p: ProviderWithLocations) => ({
           ...p,
-          locations: p.locations.map(loc => ({ ...loc, distance: null })),
+          locations: p.locations.map((loc: any) => ({ ...loc, distance: null })),
           closestLocationDistance: null
         }));
       }
     }
 
-    const formatted = results.map(p => ({
-      id: p.id,
-      name: p.organizationName,
-      logoUrl: p.logoUrl,
-      website: p.website,
-      bio: p.bio,
-      locations: p.locations.map(l => ({
-        id: l.id,
-        name: l.name,
-        address: l.address1 ? `${l.address1}, ${l.city}, ${l.state} ${l.zipCode}` : '',
-        distance: (l as any).distance ?? null
-      })),
-      distance: (p as any).closestLocationDistance ?? null
-    }));
+    const formatted = results.map((p: ProviderWithLocations) => {
+      const closestLocation = p.locations[0]; // safe: guaranteed at least one active location
+      return {
+        id: p.id,
+        name: p.organizationName,
+        logoUrl: p.logoUrl,
+        website: p.website,
+        bio: p.bio,
+        location: {
+          id: closestLocation.id,
+          name: closestLocation.name,
+          address1: closestLocation.address1,
+          city: closestLocation.city,
+          state: closestLocation.state,
+          zipCode: closestLocation.zipCode,
+          latitude: closestLocation.latitude,
+          longitude: closestLocation.longitude,
+          distance: (closestLocation as any).distance ?? null
+        },
+        distance: (p as any).closestLocationDistance ?? null
+      };
+    });
 
     const response: any = {
       results: formatted,

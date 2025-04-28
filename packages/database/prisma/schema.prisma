@@ -1,7 +1,7 @@
 // packages/database/prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
+  output   = "./node_modules/.prisma/client"
 }
 
 datasource db {
@@ -50,7 +50,6 @@ model Provider {
   zipCode          String?
   subscriptionStatus String?
   subscriptionTier String?
-  // Add these fields as JSON
   specialties      Json?     // For storing array of specialties
   services         Json?     // For storing array of services
   insuranceAccepted Json?    // For storing array of accepted insurance

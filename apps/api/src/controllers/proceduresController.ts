@@ -1,26 +1,25 @@
-
 import { Request, Response } from 'express';
 import { prisma } from '@packages/database';
 
 /**
  * GET /api/procedures/categories
  */
-export async function getCategories(req: Request, res: Response): Promise<Response> {
+export async function getCategories(req: Request, res: Response): Promise<void> {
   try {
     const categories = await prisma.procedureCategory.findMany({
       orderBy: { name: 'asc' }
     });
-    return res.json({ categories });
+    res.json({ categories });
   } catch (err) {
     console.error('Error fetching categories:', err instanceof Error ? err.message : err);
-    return res.status(500).json({ message: 'Failed to fetch categories' });
+    res.status(500).json({ message: 'Failed to fetch categories' });
   }
 }
 
 /**
  * GET /api/procedures/templates
  */
-export async function getTemplates(req: Request, res: Response): Promise<Response> {
+export async function getTemplates(req: Request, res: Response): Promise<void> {
   try {
     const { query, categoryId } = req.query;
     const where: any = {};
@@ -43,26 +42,25 @@ export async function getTemplates(req: Request, res: Response): Promise<Respons
       take: 50
     });
 
-    return res.json({ templates });
+    res.json({ templates });
   } catch (err) {
     console.error('Error fetching templates:', err instanceof Error ? err.message : err);
-    return res.status(500).json({ message: 'Failed to fetch procedure templates' });
+    res.status(500).json({ message: 'Failed to fetch procedure templates' });
   }
 }
 
 /**
  * GET /api/procedures/provider
  */
-export async function getProviderProcedures(req: Request, res: Response): Promise<Response> {
+export async function getProviderProcedures(req: Request, res: Response): Promise<void> {
   try {
     const providerId = req.user?.provider?.id;
     if (!providerId) {
-      return res.status(403).json({ message: 'Not authorized' });
+      res.status(403).json({ message: 'Not authorized' });
+      return;
     }
 
-    const whereClause: any = {
-      location: { providerId }
-    };
+    const whereClause: any = { location: { providerId } };
     if (typeof req.query.locationId === 'string') {
       whereClause.locationId = req.query.locationId;
     }
@@ -88,17 +86,17 @@ export async function getProviderProcedures(req: Request, res: Response): Promis
       ]
     });
 
-    return res.json({ procedures });
+    res.json({ procedures });
   } catch (err) {
     console.error('Error fetching provider procedures:', err instanceof Error ? err.message : err);
-    return res.status(500).json({ message: 'Failed to fetch procedures' });
+    res.status(500).json({ message: 'Failed to fetch procedures' });
   }
 }
 
 /**
  * GET /api/procedures/price/:id
  */
-export async function getProcedurePrice(req: Request, res: Response): Promise<Response> {
+export async function getProcedurePrice(req: Request, res: Response): Promise<void> {
   try {
     const procedurePrice = await prisma.procedurePrice.findUnique({
       where: { id: req.params.id },
@@ -109,29 +107,31 @@ export async function getProcedurePrice(req: Request, res: Response): Promise<Re
     });
 
     if (!procedurePrice) {
-      return res.status(404).json({ message: 'Procedure price not found' });
+      res.status(404).json({ message: 'Procedure price not found' });
+      return;
     }
 
-    return res.json({ procedurePrice });
+    res.json({ procedurePrice });
   } catch (err) {
     console.error('Error fetching procedure price:', err instanceof Error ? err.message : err);
-    return res.status(500).json({ message: 'Failed to fetch procedure price' });
+    res.status(500).json({ message: 'Failed to fetch procedure price' });
   }
 }
 
 /**
  * POST /api/procedures/price
  */
-export async function createProcedurePrice(req: Request, res: Response): Promise<Response> {
+export async function createProcedurePrice(req: Request, res: Response): Promise<void> {
   try {
     const { locationId, templateId, price, comments, isActive = true } = req.body;
 
     const location = await prisma.location.findFirst({
-      where: { id: locationId, providerId: req.user.provider.id }
+      where: { id: locationId, providerId: req.user?.provider?.id }
     });
 
     if (!location) {
-      return res.status(403).json({ message: 'Not authorized to add procedures to this location' });
+      res.status(403).json({ message: 'Not authorized to add procedures to this location' });
+      return;
     }
 
     const existing = await prisma.procedurePrice.findFirst({
@@ -139,7 +139,8 @@ export async function createProcedurePrice(req: Request, res: Response): Promise
     });
 
     if (existing) {
-      return res.status(400).json({ message: 'Procedure price already exists for this location' });
+      res.status(400).json({ message: 'Procedure price already exists for this location' });
+      return;
     }
 
     const procedurePrice = await prisma.procedurePrice.create({
@@ -156,17 +157,17 @@ export async function createProcedurePrice(req: Request, res: Response): Promise
       }
     });
 
-    return res.status(201).json({ procedurePrice });
+    res.status(201).json({ procedurePrice });
   } catch (err) {
     console.error('Error creating procedure price:', err instanceof Error ? err.message : err);
-    return res.status(500).json({ message: 'Failed to create procedure price' });
+    res.status(500).json({ message: 'Failed to create procedure price' });
   }
 }
 
 /**
  * PUT /api/procedures/price/:id
  */
-export async function updateProcedurePrice(req: Request, res: Response): Promise<Response> {
+export async function updateProcedurePrice(req: Request, res: Response): Promise<void> {
   try {
     const { price, comments, isActive } = req.body;
 
@@ -176,11 +177,13 @@ export async function updateProcedurePrice(req: Request, res: Response): Promise
     });
 
     if (!procedure) {
-      return res.status(404).json({ message: 'Procedure price not found' });
+      res.status(404).json({ message: 'Procedure price not found' });
+      return;
     }
 
-    if (procedure.location.providerId !== req.user.provider.id) {
-      return res.status(403).json({ message: 'Not authorized to update this procedure' });
+    if (procedure.location.providerId !== req.user?.provider?.id) {
+      res.status(403).json({ message: 'Not authorized to update this procedure' });
+      return;
     }
 
     const updated = await prisma.procedurePrice.update({
@@ -192,17 +195,17 @@ export async function updateProcedurePrice(req: Request, res: Response): Promise
       }
     });
 
-    return res.json({ procedurePrice: updated });
+    res.json({ procedurePrice: updated });
   } catch (err) {
     console.error('Error updating procedure price:', err instanceof Error ? err.message : err);
-    return res.status(500).json({ message: 'Failed to update procedure price' });
+    res.status(500).json({ message: 'Failed to update procedure price' });
   }
 }
 
 /**
  * DELETE /api/procedures/price/:id
  */
-export async function deleteProcedurePrice(req: Request, res: Response): Promise<Response> {
+export async function deleteProcedurePrice(req: Request, res: Response): Promise<void> {
   try {
     const procedure = await prisma.procedurePrice.findUnique({
       where: { id: req.params.id },
@@ -210,19 +213,21 @@ export async function deleteProcedurePrice(req: Request, res: Response): Promise
     });
 
     if (!procedure) {
-      return res.status(404).json({ message: 'Procedure price not found' });
+      res.status(404).json({ message: 'Procedure price not found' });
+      return;
     }
 
-    if (procedure.location.providerId !== req.user.provider.id) {
-      return res.status(403).json({ message: 'Not authorized to delete this procedure' });
+    if (procedure.location.providerId !== req.user?.provider?.id) {
+      res.status(403).json({ message: 'Not authorized to delete this procedure' });
+      return;
     }
 
     await prisma.procedurePrice.delete({ where: { id: req.params.id } });
 
-    return res.status(204).end();
+    res.status(204).end();
   } catch (err) {
     console.error('Error deleting procedure price:', err instanceof Error ? err.message : err);
-    return res.status(500).json({ message: 'Failed to delete procedure price' });
+    res.status(500).json({ message: 'Failed to delete procedure price' });
   }
 }
 
@@ -230,7 +235,7 @@ export async function deleteProcedurePrice(req: Request, res: Response): Promise
  * GET /api/procedures/:id
  * Get a procedure template with all available provider prices
  */
-export async function getProcedureById(req: Request, res: Response): Promise<Response> {
+export async function getProcedureById(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
 
@@ -240,7 +245,8 @@ export async function getProcedureById(req: Request, res: Response): Promise<Res
     });
 
     if (!template) {
-      return res.status(404).json({ message: 'Procedure not found' });
+      res.status(404).json({ message: 'Procedure not found' });
+      return;
     }
 
     const prices = await prisma.procedurePrice.findMany({
@@ -249,7 +255,7 @@ export async function getProcedureById(req: Request, res: Response): Promise<Res
     });
 
     const providersData = await Promise.all(
-      prices.map(async (price) => {
+      prices.map(async (price: typeof prices[number]) => {
         const provider = await prisma.provider.findUnique({
           where: { id: price.location.providerId }
         });
@@ -281,17 +287,17 @@ export async function getProcedureById(req: Request, res: Response): Promise<Res
       providers: providersData
     };
 
-    return res.json({ procedure });
+    res.json({ procedure });
   } catch (err) {
     console.error('Error fetching procedure by id:', err instanceof Error ? err.message : err);
-    return res.status(500).json({ message: 'Failed to fetch procedure details' });
+    res.status(500).json({ message: 'Failed to fetch procedure details' });
   }
 }
 
 /**
  * GET /api/locations/:locationId/procedures
  */
-export async function getProceduresByLocation(req: Request, res: Response): Promise<Response> {
+export async function getProceduresByLocation(req: Request, res: Response): Promise<void> {
   try {
     const { locationId } = req.params;
 
@@ -301,14 +307,12 @@ export async function getProceduresByLocation(req: Request, res: Response): Prom
         template: { include: { category: true } },
         location: true
       },
-      orderBy: [
-        { template: { name: 'asc' } }
-      ]
+      orderBy: [{ template: { name: 'asc' } }]
     });
 
-    return res.json({ procedures });
+    res.json({ procedures });
   } catch (err) {
     console.error('Error fetching procedures by location:', err instanceof Error ? err.message : err);
-    return res.status(500).json({ message: 'Failed to fetch procedures for location' });
+    res.status(500).json({ message: 'Failed to fetch procedures for location' });
   }
 }

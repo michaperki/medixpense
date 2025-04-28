@@ -1,4 +1,3 @@
-
 import { Request, Response } from 'express';
 import { uploadToS3, getPublicUrl } from '../services/aws';
 import { prisma } from '@packages/database';
@@ -7,23 +6,23 @@ import { prisma } from '@packages/database';
  * GET /api/profile/provider
  * Get the current provider's profile
  */
-export async function getProviderProfile(req: Request, res: Response): Promise<Response> {
+export async function getProviderProfile(req: Request, res: Response): Promise<void> {
   try {
-    const userId = req.user.id;
-    
-    // Get provider profile
+    const userId = req.user?.id;
+
     const provider = await prisma.provider.findUnique({
       where: { userId }
     });
-    
+
     if (!provider) {
-      return res.status(404).json({ message: 'Provider profile not found' });
+      res.status(404).json({ message: 'Provider profile not found' });
+      return;
     }
-    
-    return res.json(provider);
+
+    res.json(provider);
   } catch (err) {
     console.error('Error fetching provider profile:', err);
-    return res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' });
   }
 }
 
@@ -31,9 +30,9 @@ export async function getProviderProfile(req: Request, res: Response): Promise<R
  * PUT /api/profile/provider
  * Update the current provider's profile
  */
-export async function updateProviderProfile(req: Request, res: Response): Promise<Response> {
+export async function updateProviderProfile(req: Request, res: Response): Promise<void> {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
     const {
       organizationName,
       bio,
@@ -44,17 +43,16 @@ export async function updateProviderProfile(req: Request, res: Response): Promis
       state,
       zipCode
     } = req.body;
-    
-    // Check if provider exists
+
     const existingProvider = await prisma.provider.findUnique({
       where: { userId }
     });
-    
+
     if (!existingProvider) {
-      return res.status(404).json({ message: 'Provider profile not found' });
+      res.status(404).json({ message: 'Provider profile not found' });
+      return;
     }
-    
-    // Update provider
+
     const updatedProvider = await prisma.provider.update({
       where: { userId },
       data: {
@@ -68,19 +66,18 @@ export async function updateProviderProfile(req: Request, res: Response): Promis
         zipCode
       }
     });
-    
-    // Also update user phone if provided
+
     if (phone) {
       await prisma.user.update({
         where: { id: userId },
         data: { phone }
       });
     }
-    
-    return res.json(updatedProvider);
+
+    res.json(updatedProvider);
   } catch (err) {
     console.error('Error updating provider profile:', err);
-    return res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' });
   }
 }
 
@@ -88,38 +85,37 @@ export async function updateProviderProfile(req: Request, res: Response): Promis
  * POST /api/profile/provider/logo
  * Upload provider logo
  */
-export async function uploadProviderLogo(req: Request, res: Response): Promise<Response> {
+export async function uploadProviderLogo(req: Request, res: Response): Promise<void> {
   try {
     if (!req.file) {
-      return res.status(400).json({ message: 'No file uploaded' });
+      res.status(400).json({ message: 'No file uploaded' });
+      return;
     }
-    
-    const userId = req.user.id;
-    
-    // Check if provider exists
+
+    const userId = req.user?.id;
+
     const provider = await prisma.provider.findUnique({
       where: { userId }
     });
-    
+
     if (!provider) {
-      return res.status(404).json({ message: 'Provider profile not found' });
+      res.status(404).json({ message: 'Provider profile not found' });
+      return;
     }
-    
-    // Upload to S3
+
     const filename = `provider-logos/${userId}-${Date.now()}-${req.file.originalname}`;
-    const result = await uploadToS3(req.file.buffer, filename, req.file.mimetype);
+    await uploadToS3(req.file.buffer, filename, req.file.mimetype);
     const logoUrl = getPublicUrl(filename);
-    
-    // Update provider with logo URL
-    const updatedProvider = await prisma.provider.update({
+
+    await prisma.provider.update({
       where: { userId },
       data: { logoUrl }
     });
-    
-    return res.json({ logoUrl });
+
+    res.json({ logoUrl });
   } catch (err) {
     console.error('Error uploading provider logo:', err);
-    return res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' });
   }
 }
 
@@ -127,11 +123,10 @@ export async function uploadProviderLogo(req: Request, res: Response): Promise<R
  * GET /api/profile/provider/:providerId/public
  * Get public provider profile
  */
-export async function getPublicProviderProfile(req: Request, res: Response): Promise<Response> {
+export async function getPublicProviderProfile(req: Request, res: Response): Promise<void> {
   try {
     const { providerId } = req.params;
-    
-    // Get provider with limited fields for public viewing
+
     const provider = await prisma.provider.findUnique({
       where: { id: providerId },
       select: {
@@ -145,18 +140,18 @@ export async function getPublicProviderProfile(req: Request, res: Response): Pro
         city: true,
         state: true,
         zipCode: true,
-        createdAt: true,
+        createdAt: true
       }
     });
-    
+
     if (!provider) {
-      return res.status(404).json({ message: 'Provider profile not found' });
+      res.status(404).json({ message: 'Provider profile not found' });
+      return;
     }
-    
-    return res.json(provider);
+
+    res.json(provider);
   } catch (err) {
     console.error('Error fetching public provider profile:', err);
-    return res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: 'Internal server error' });
   }
 }
-

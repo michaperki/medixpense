@@ -1,7 +1,14 @@
-
 {
   "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
     "baseUrl": ".",
+    "esModuleInterop": true,
+    "allowJs": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
     "paths": {
       "@packages/database": ["packages/database"],
       "@packages/common": ["packages/common"],

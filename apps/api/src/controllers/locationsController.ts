@@ -1,14 +1,12 @@
-
 import { prisma } from '@packages/database';
 import { Request, Response } from 'express';
 
 /**
  * POST /api/locations
  */
-export async function createLocation(req: Request, res: Response) {
+export async function createLocation(req: Request, res: Response): Promise<void> {
   try {
-    // Ensure the user and provider are available in req.user
-    const providerId = req.user.provider.id;
+    const providerId = req.user?.provider?.id;
 
     const loc = await prisma.location.create({
       data: {
@@ -20,9 +18,10 @@ export async function createLocation(req: Request, res: Response) {
         zipCode: req.body.zipCode,
         phone: req.body.phone,
         isActive: req.body.isActive,
-        providerId: providerId
+        providerId
       }
     });
+
     res.status(201).json({ location: loc });
   } catch (err) {
     console.error('Error creating location:', err);
@@ -33,28 +32,27 @@ export async function createLocation(req: Request, res: Response) {
 /**
  * GET /api/locations?page=&limit=
  */
-export async function getLocations(req: Request, res: Response) {
+export async function getLocations(req: Request, res: Response): Promise<void> {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
 
-    // Ensure the user and provider are available in req.user
-    const providerId = req.user.provider.id;
+    const providerId = req.user?.provider?.id;
 
     const [rows, total] = await Promise.all([
       prisma.location.findMany({
-        where: { providerId: providerId },
+        where: { providerId },
         skip,
         take: limit,
         include: { _count: { select: { procedures: true } } },
         orderBy: { createdAt: 'desc' }
       }),
-      prisma.location.count({ where: { providerId: providerId } })
+      prisma.location.count({ where: { providerId } })
     ]);
 
     const pages = Math.ceil(total / limit);
-    const locations = rows.map((loc) => ({
+    const locations = rows.map((loc: typeof rows[number]) => ({
       ...loc,
       procedureCount: loc._count.procedures
     }));
@@ -69,16 +67,21 @@ export async function getLocations(req: Request, res: Response) {
 /**
  * GET /api/locations/:id
  */
-export async function getLocationById(req: Request, res: Response) {
+export async function getLocationById(req: Request, res: Response): Promise<void> {
   try {
     const loc = await prisma.location.findFirst({
       where: {
         id: req.params.id,
-        providerId: req.user.provider.id
+        providerId: req.user?.provider?.id
       },
       include: { procedures: true }
     });
-    if (!loc) return res.status(404).json({ message: 'Not found' });
+
+    if (!loc) {
+      res.status(404).json({ message: 'Not found' });
+      return;
+    }
+
     res.json({ location: loc });
   } catch (err) {
     console.error('Error fetching location:', err);
@@ -89,9 +92,11 @@ export async function getLocationById(req: Request, res: Response) {
 /**
  * PUT /api/locations/:id
  */
-export async function updateLocation(req: Request, res: Response) {
+export async function updateLocation(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
+    const providerId = req.user?.provider?.id;
+
     const data = {
       name: req.body.name,
       address1: req.body.address1,
@@ -103,14 +108,15 @@ export async function updateLocation(req: Request, res: Response) {
       isActive: req.body.isActive
     };
 
-    // Ensure the user and provider are available in req.user
-    const providerId = req.user.provider.id;
-
     const result = await prisma.location.updateMany({
-      where: { id, providerId: providerId },
+      where: { id, providerId },
       data
     });
-    if (result.count === 0) return res.status(404).json({ message: 'Not found or no permission' });
+
+    if (result.count === 0) {
+      res.status(404).json({ message: 'Not found or no permission' });
+      return;
+    }
 
     const updated = await prisma.location.findUnique({ where: { id } });
     res.json({ location: updated });
@@ -123,19 +129,22 @@ export async function updateLocation(req: Request, res: Response) {
 /**
  * DELETE /api/locations/:id
  */
-export async function deleteLocation(req: Request, res: Response) {
+export async function deleteLocation(req: Request, res: Response): Promise<void> {
   try {
-    // Ensure the user and provider are available in req.user
-    const providerId = req.user.provider.id;
+    const providerId = req.user?.provider?.id;
 
     const result = await prisma.location.deleteMany({
-      where: { id: req.params.id, providerId: providerId }
+      where: { id: req.params.id, providerId }
     });
-    if (result.count === 0) return res.status(404).json({ message: 'Not found or no permission' });
+
+    if (result.count === 0) {
+      res.status(404).json({ message: 'Not found or no permission' });
+      return;
+    }
+
     res.status(204).end();
   } catch (err) {
     console.error('Error deleting location:', err);
     res.status(500).json({ message: 'Error deleting location' });
   }
 }
-
