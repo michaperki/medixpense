@@ -13,7 +13,10 @@
       "@packages/database": ["packages/database"],
       "@packages/common": ["packages/common"],
       "@packages/logger": ["packages/logger"],
-      "@packages/ui": ["packages/ui"]
+      "@packages/ui": ["packages/ui"],
+      "@api/*": ["apps/api/src/*"],
+      "@web/*": ["apps/web/src/*"],
+      "@database/*": ["packages/database/src/*"]
     }
   }
 }

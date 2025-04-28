@@ -1,14 +1,28 @@
-
 import { configureLogger } from './core';
 import pino from 'pino';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 
 const isServer = typeof window === 'undefined';
+const isTestE2E = process.env.NODE_ENV === 'test-e2e';
 
 export const pinoLogger = isServer
-  ? pino({
-      level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-      transport: undefined, // explicitly omit
-    })
+  ? (() => {
+      const streams = isTestE2E
+        ? [
+            { stream: fs.createWriteStream(path.join('cypress', 'logs', 'backend.log'), { flags: 'a' }) },
+            { stream: process.stdout },
+          ]
+        : [{ stream: process.stdout }];
+
+      return pino(
+        {
+          level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+        },
+        pino.multistream(streams)
+      );
+    })()
   : pino({
       level: 'debug',
       transport: {
@@ -27,4 +41,3 @@ export function loggingMiddleware(req, res, next) {
   req.logger = pinoLogger.child({ reqId });
   next();
 }
-
